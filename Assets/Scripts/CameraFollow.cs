@@ -4,43 +4,35 @@ public class CameraFollow : MonoBehaviour
 {
     public Transform target;          // The agent/player to follow
     public Vector3 offset = new Vector3(0, 5, -7); // Default offset
-    public float followSpeed = 10f;   // How fast the camera follows
-    public float rotationSpeed = 5f;  // How fast the camera rotates
+    public float followSpeed = 10f;   // Smooth movement speed
+    public float rotationSpeed = 5f;  // Smooth rotation speed
 
-    private float currentYaw = 0f;    // Horizontal rotation around the target
+    private float currentYaw;
     private float currentPitch = 20f;
+
+    void Start()
+    {
+        if (target != null)
+        {
+            currentYaw = target.eulerAngles.y; // Initialize to agent's yaw
+        }
+    }
 
     void LateUpdate()
     {
-        if(target == null) return;
-        // 1. Rotate the camera based on agent's direction
+        if (target == null) return;
+
+        // Smoothly follow agent's rotation
         currentYaw = Mathf.Lerp(currentYaw, target.eulerAngles.y, rotationSpeed * Time.deltaTime);
 
-        // Optional: You can also allow mouse control here
-        // currentYaw += Input.GetAxis("Mouse X") * rotationSpeed;
-        // currentPitch -= Input.GetAxis("Mouse Y") * rotationSpeed;
-        // currentPitch = Mathf.Clamp(currentPitch, 5f, 60f);
-
-        // 2. Calculate rotation and position
+        // Calculate rotation and desired position
         Quaternion rotation = Quaternion.Euler(currentPitch, currentYaw, 0);
         Vector3 desiredPosition = target.position + rotation * offset;
 
-        // 3. Smoothly move the camera
+        // Smoothly move camera
         transform.position = Vector3.Lerp(transform.position, desiredPosition, followSpeed * Time.deltaTime);
 
-        // 4. Always look at the target
+        // Look at agent's head
         transform.LookAt(target.position + Vector3.up * 1.5f);
-
-
-        // // Desired camera position based on target + offset
-        // Vector3 desiredPosition = target.position + offset;
-
-        // // Smoothly move camera to desired position
-        // Vector3 smoothedPosition = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed);
-
-        // transform.position = smoothedPosition;
-
-        // // Optional: make camera look at the character
-        // transform.LookAt(target);
     }
 }

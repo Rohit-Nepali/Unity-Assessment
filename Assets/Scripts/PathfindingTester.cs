@@ -5,8 +5,8 @@ using UnityEngine;
 
 public class PathfindingTester : MonoBehaviour
 {
-    private Animator anim;
-    private Vector3 animLastPos;
+    // private Animator anim;
+    // private Vector3 animLastPos;
     private CharacterController controller;
 
     // The A* manager.
@@ -44,12 +44,16 @@ public class PathfindingTester : MonoBehaviour
     private float totalDistance = 0f;
     private Vector3 lastPosition = Vector3.zero;
 
+    public GameObject tree;
+    public GameObject woodLogPrefab;
+    public float cuttingTime = 4f;
+
+    private bool goingToTree = false;
+    private bool cutting = false;
+
     void Start()
     {
-        anim = GetComponent<Animator>();
-        animLastPos = transform.position;
         controller = GetComponent<CharacterController>();
-
 
         if (start == null || end == null)
         {
@@ -152,6 +156,38 @@ public class PathfindingTester : MonoBehaviour
 
     void Update()
     {
+        if (goingToTree && tree != null && !cutting)
+        {
+            Vector3 targetPos = new Vector3(
+                tree.transform.position.x,
+                transform.position.y,
+                tree.transform.position.z
+            );
+
+            Vector3 dir = targetPos - transform.position;
+            float dist = dir.magnitude;
+
+            if (dist > 5.5f)
+            {
+                dir.Normalize();
+                Quaternion rot = Quaternion.LookRotation(dir);
+                transform.rotation = rot;
+
+                Vector3 move = dir * currentSpeed;
+                move.y += Physics.gravity.y;
+                controller.Move(move * Time.deltaTime);
+            }
+            else
+            {
+                // Stop the agent
+                controller.Move(Vector3.zero);
+
+                // Tell Agent.cs to set speed to 0
+                GetComponent<Agent>().ForceIdle(); // optional method we can add
+                StartCoroutine(CutTree());
+            }
+        }
+
         if (agentMove)
         {
             // No path or index out of range, just stop.
@@ -175,9 +211,6 @@ public class PathfindingTester : MonoBehaviour
             // Set the current target.
             currentTargetPos = aStarPath[currentTargetArrayIndex].ToNode.transform.position;
 
-            // Clear y to avoid up/down movement. Assumes flat surface.
-            // currentTargetPos.y = transform.position.y;
-
             // Get a vector to the target position.
             Vector3 flatTargetPos = new Vector3(
                 currentTargetPos.x,
@@ -187,7 +220,6 @@ public class PathfindingTester : MonoBehaviour
 
             Vector3 direction = flatTargetPos - transform.position;
             float distance = direction.magnitude;
-
 
             // Face in the right direction.
             if (distance > 0.001f)
@@ -209,37 +241,18 @@ public class PathfindingTester : MonoBehaviour
             }
 
             // Check if close to current target.
-            if (distance < 1.2f)
+            if (distance < 1.5f)
             {
                 // Close to target, so move to the next target in the list (if there is one).
                 currentTargetArrayIndex++;
 
                 if (currentTargetArrayIndex == aStarPath.Count)
                 {
-                    // The A* agent has reached the goal location.
-                    Debug.Log("Time: " + timer);
-                    Debug.Log("Distance: " + totalDistance);
+                    Debug.Log("Reached waypoint");
 
-                    totalDistance = 0f;
-                    timer = 0f;
-
-                    // Check if the current target is the start node. If yes, then stop.
-                    if (aStarPath[aStarPath.Count - 1].ToNode == start)
-                    {
-                        agentMove = false;
-                        Debug.Log("Agent Stopped.");
-                        return;
-                    }
-
-                    // Not back at start, so plan path back to the start.
-                    aStarPath = aStarManager.PathfindAStar(end, start);
-                    currentTargetArrayIndex = 0;
-
-                    if (aStarPath == null || aStarPath.Count == 0)
-                    {
-                        Debug.Log("Warning, A* did not return a path back to the start.");
-                        agentMove = false;
-                    }
+                    agentMove = false;
+                    Debug.Log("Agent move, returning to tree");
+                    goingToTree = true;
                 }
             }
         }
@@ -249,22 +262,11 @@ public class PathfindingTester : MonoBehaviour
             // (Idle / do nothing for now)
         }
 
-        // ------ ANIMATION CONTROL ------
-
-        // Calculate movement speed
-        float animSpeed = (transform.position - animLastPos).magnitude / Time.deltaTime;
-        if (animSpeed < 0.05f)
-            animSpeed = 0f;
-
-        // Send to Animator
-        anim.SetFloat("speed", animSpeed);
-        // Update stored pos
-        animLastPos = transform.position;
-
-        // ------ UI UPDATE ------
-        // ------ UI UPDATE ------
+        // // ------ UI UPDATE ------
         if (agentInfoText != null)
         {
+            float animSpeed = GetComponent<Agent>().currentSpeed; // NEW
+
             const int maxLabelLength = 9; // "Distance:" is the longest label at 9 chars
 
             agentInfoText.text =
@@ -274,5 +276,28 @@ public class PathfindingTester : MonoBehaviour
                 + $"<color=#FFFFFF><b>Speed:</b></color>{new string(' ', maxLabelLength - 6)}{animSpeed:F2} u/s\n"
                 + $"<color=#FFFFFF><b>Distance:</b></color>{new string(' ', maxLabelLength - 9)}{totalDistance:F2} units";
         }
+    }
+
+    private IEnumerator CutTree()
+    {
+        cutting = true;
+        goingToTree = false;
+
+        Debug.Log("Cutting tree...");
+
+        yield return new WaitForSeconds(cuttingTime);
+
+        Vector3 pos = tree.transform.position;
+        Quaternion rot = tree.transform.rotation;
+
+        Destroy(tree);
+        Instantiate(woodLogPrefab, pos, rot);
+
+        // Return to waypoint
+        aStarPath = aStarManager.PathfindAStar(end, start);
+        currentTargetArrayIndex = 0;
+        agentMove = true;
+
+        cutting = false;
     }
 }
