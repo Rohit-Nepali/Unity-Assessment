@@ -7,6 +7,7 @@ public class Agent : MonoBehaviour
 
     public float currentSpeed { get; private set; } // Expose speed
 
+   
     void Start()
     {
         anim = GetComponent<Animator>();
@@ -34,7 +35,7 @@ public class Agent : MonoBehaviour
 
         // Store for external access
         currentSpeed = speed;
-    }  
+    }
 
     public void ForceIdle()
     {

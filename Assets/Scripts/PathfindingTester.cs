@@ -51,6 +51,9 @@ public class PathfindingTester : MonoBehaviour
     private bool goingToTree = false;
     private bool cutting = false;
 
+    [Header("Harvest Settings")]
+    public int woodYield = 4; // How many logs one tree produces
+
     void Start()
     {
         controller = GetComponent<CharacterController>();
@@ -285,13 +288,30 @@ public class PathfindingTester : MonoBehaviour
 
         Debug.Log("Cutting tree...");
 
-        yield return new WaitForSeconds(cuttingTime);
-
-        Vector3 pos = tree.transform.position;
+        // Save tree position & rotation BEFORE destroying
+        Vector3 basePos = tree.transform.position;
+        basePos.y = transform.position.y;
         Quaternion rot = tree.transform.rotation;
 
+        // Wait for cutting animation / time
+        yield return new WaitForSeconds(cuttingTime);
+
+        // Remove tree
         Destroy(tree);
-        Instantiate(woodLogPrefab, pos, rot);
+
+        // Spawn multiple wood logs
+        for (int i = 0; i < woodYield; i++)
+        {
+            Vector3 spawnPos =
+                basePos + new Vector3(Random.Range(-0.5f, 0.5f), 0.3f, Random.Range(-0.5f, 0.5f));
+
+            Instantiate(woodLogPrefab, spawnPos, rot);
+        }
+
+        Debug.Log($"Spawned {woodYield} wood logs");
+
+        // Small pause so player can SEE the wood
+        yield return new WaitForSeconds(2f);
 
         // Return to waypoint
         aStarPath = aStarManager.PathfindAStar(end, start);
