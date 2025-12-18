@@ -7,7 +7,6 @@ public class Agent : MonoBehaviour
 
     public float currentSpeed { get; private set; } // Expose speed
 
-   
     void Start()
     {
         anim = GetComponent<Animator>();

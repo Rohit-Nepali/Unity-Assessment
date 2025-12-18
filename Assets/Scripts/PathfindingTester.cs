@@ -154,8 +154,8 @@ public class PathfindingTester : MonoBehaviour
     }
 
     // Update is called once per frame
-    [Header("UI Display")]
-    public TMP_Text agentInfoText; // Drag the UI Text here in Inspector
+    // [Header("UI Display")]
+    // public TMP_Text agentInfoText; // Drag the UI Text here in Inspector
 
     void Update()
     {
@@ -266,19 +266,19 @@ public class PathfindingTester : MonoBehaviour
         }
 
         // // ------ UI UPDATE ------
-        if (agentInfoText != null)
-        {
-            float animSpeed = GetComponent<Agent>().currentSpeed; // NEW
+        // if (agentInfoText != null)
+        // {
+        //     float animSpeed = GetComponent<Agent>().currentSpeed; // NEW
 
-            const int maxLabelLength = 9; // "Distance:" is the longest label at 9 chars
+        //     const int maxLabelLength = 9; // "Distance:" is the longest label at 9 chars
 
-            agentInfoText.text =
-                $"<color=#FFFFFF><b>Path:</b></color>{new string(' ', maxLabelLength - 5)}<color=#FFFFFF>Metric Info</color>\n"
-                + $"<color=#FFFFFF><b>Time:</b></color>{new string(' ', maxLabelLength - 5)}{timer:F2} s\n"
-                + $"<color=#FFFFFF><b>Agent:</b></color>{new string(' ', maxLabelLength - 6)}{gameObject.name}\n"
-                + $"<color=#FFFFFF><b>Speed:</b></color>{new string(' ', maxLabelLength - 6)}{animSpeed:F2} u/s\n"
-                + $"<color=#FFFFFF><b>Distance:</b></color>{new string(' ', maxLabelLength - 9)}{totalDistance:F2} units";
-        }
+        //     agentInfoText.text =
+        //         $"<color=#FFFFFF><b>Path:</b></color>{new string(' ', maxLabelLength - 5)}<color=#FFFFFF>Metric Info</color>\n"
+        //         + $"<color=#FFFFFF><b>Time:</b></color>{new string(' ', maxLabelLength - 5)}{timer:F2} s\n"
+        //         + $"<color=#FFFFFF><b>Agent:</b></color>{new string(' ', maxLabelLength - 6)}{gameObject.name}\n"
+        //         + $"<color=#FFFFFF><b>Speed:</b></color>{new string(' ', maxLabelLength - 6)}{animSpeed:F2} u/s\n"
+        //         + $"<color=#FFFFFF><b>Distance:</b></color>{new string(' ', maxLabelLength - 9)}{totalDistance:F2} units";
+        // }
     }
 
     private IEnumerator CutTree()
