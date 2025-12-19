@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
 
 public class PathfindingTester : MonoBehaviour
@@ -35,19 +34,17 @@ public class PathfindingTester : MonoBehaviour
     private Vector3 currentTargetPos;
     private bool agentMove = true;
 
-    public GameObject tree;
+    public List<GameObject> trees = new List<GameObject>(); // Support multiple trees
     public GameObject woodLogPrefab;
     public float cuttingTime = 4f;
+    public int woodYield = 4; // How many logs one tree produces
 
-    private bool goingToTree = false;
     private bool cutting = false;
     private bool isIdle = false;
 
-    [Header("Harvest Settings")]
-    public int woodYield = 4; // How many logs one tree produces
-
     private Agent agent;
     private Part2_ParcelSystem parcelSystem;
+    private GameObject currentTree;
 
     void Start()
     {
@@ -98,7 +95,6 @@ public class PathfindingTester : MonoBehaviour
                 waypointGoals.Add(waypoint);
             }
 
-            // Loop through a waypoint's connections.
             foreach (VisGraphConnection aVisGraphConnection in tmpWaypointMan.Connections)
             {
                 if (aVisGraphConnection.ToNode != null)
@@ -117,24 +113,23 @@ public class PathfindingTester : MonoBehaviour
             }
         }
 
-        // Run A Star...
-        // aStarPath stores all the connections in the path/route to the goal/end node.
+        // Run A* pathfinding.
         aStarPath = aStarManager.PathfindAStar(start, end);
-
         if (aStarPath == null || aStarPath.Count == 0)
         {
-            Debug.Log("Warning, A* did not return a path between the start and end node.");
+            Debug.Log("Warning, A* did not return a path.");
             agentMove = false;
         }
+
+        // Select the first available tree
+        SelectNextTree();
     }
 
-    // Draws debug objects in the editor and during editor play (if option set).
     void OnDrawGizmos()
     {
         if (aStarPath == null)
             return;
 
-        // Draw path.
         foreach (Connection aConnection in aStarPath)
         {
             if (aConnection == null || aConnection.FromNode == null || aConnection.ToNode == null)
@@ -150,18 +145,22 @@ public class PathfindingTester : MonoBehaviour
 
     void Update()
     {
-        if (goingToTree && tree != null && !cutting)
+        if (cutting)
+            return; // Do not move while cutting
+
+        // Move to tree if agent reached the end of path
+        if (currentTree != null && !cutting)
         {
             Vector3 targetPos = new Vector3(
-                tree.transform.position.x,
+                currentTree.transform.position.x,
                 transform.position.y,
-                tree.transform.position.z
+                currentTree.transform.position.z
             );
 
             Vector3 dir = targetPos - transform.position;
             float dist = dir.magnitude;
 
-            if (dist > 5.5f)
+            if (dist > 1.5f)
             {
                 dir.Normalize();
                 Quaternion rot = Quaternion.LookRotation(dir);
@@ -170,8 +169,7 @@ public class PathfindingTester : MonoBehaviour
                 Vector3 move = dir * currentSpeed;
                 move.y += Physics.gravity.y;
 
-                // 2️⃣ Decide speed
-                float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed; // fallback if parcel system is missing
+                float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
                 if (agent != null)
                 {
                     agent.SetCurrentSpeed(speed);
@@ -180,150 +178,133 @@ public class PathfindingTester : MonoBehaviour
             }
             else
             {
-                // Stop the agent
-                isIdle = true;
-                controller.Move(Vector3.zero);
-
-                // Tell Agent.cs to set speed to 0
-                GetComponent<Agent>().ForceIdle(); // optional method we can add
-                StartCoroutine(CutTree());
+                StartCoroutine(CutTreeRoutine(currentTree));
             }
         }
-
-        if (agentMove)
+        else if (agentMove)
         {
-            // No path or index out of range, just stop.
-            if (
-                aStarPath == null
-                || aStarPath.Count == 0
-                || currentTargetArrayIndex >= aStarPath.Count
-            )
+            MoveAlongPath();
+        }
+    }
+
+    private void MoveAlongPath()
+    {
+        if (aStarPath == null || aStarPath.Count == 0 || currentTargetArrayIndex >= aStarPath.Count)
+        {
+            agentMove = false;
+            return;
+        }
+
+        currentTargetPos = aStarPath[currentTargetArrayIndex].ToNode.transform.position;
+
+        Vector3 flatTargetPos = new Vector3(
+            currentTargetPos.x,
+            transform.position.y,
+            currentTargetPos.z
+        );
+
+        Vector3 direction = flatTargetPos - transform.position;
+        float distance = direction.magnitude;
+
+        if (distance > 0.001f)
+        {
+            direction.y = 0;
+            Quaternion rotation = Quaternion.LookRotation(direction, Vector3.up);
+            transform.rotation = rotation;
+
+            Vector3 normDirection = direction / distance;
+            Vector3 move = normDirection * currentSpeed;
+            move.y += Physics.gravity.y;
+
+            float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
+            if (agent != null)
+            {
+                agent.SetCurrentSpeed(speed);
+            }
+
+            controller.Move(move * speed * Time.deltaTime);
+        }
+
+        if (distance < 1.5f)
+        {
+            currentTargetArrayIndex++;
+            if (currentTargetArrayIndex == aStarPath.Count)
             {
                 agentMove = false;
-                return;
-            }
-
-            // Set the current target.
-            currentTargetPos = aStarPath[currentTargetArrayIndex].ToNode.transform.position;
-
-            // Get a vector to the target position.
-            Vector3 flatTargetPos = new Vector3(
-                currentTargetPos.x,
-                transform.position.y,
-                currentTargetPos.z
-            );
-
-            Vector3 direction = flatTargetPos - transform.position;
-            float distance = direction.magnitude;
-
-            // Face in the right direction.
-            if (distance > 0.001f)
-            {
-                direction.y = 0;
-                Quaternion rotation = Quaternion.LookRotation(direction, Vector3.up);
-                transform.rotation = rotation;
-
-                // Normalised direction.
-                Vector3 normDirection = direction / distance;
-
-                // apply gravity so agent sticks to terrain ground
-                Vector3 move = normDirection * currentSpeed;
-                move.y += Physics.gravity.y;
-
-                // Move the game object.
-                // Decide speed
-                float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed; // fallback if parcel system is missing
-                if (agent != null)
-                {
-                    agent.SetCurrentSpeed(speed);
-                }
-                controller.Move(move * speed * Time.deltaTime);
-            }
-
-            // Check if close to current target.
-            if (distance < 1.5f)
-            {
-                // Close to target, so move to the next target in the list (if there is one).
-                currentTargetArrayIndex++;
-
-                if (currentTargetArrayIndex == aStarPath.Count)
-                {
-                    Debug.Log("Reached waypoint");
-
-                    agentMove = false;
-                    Debug.Log("Agent move, returning to tree");
-                    goingToTree = true;
-                }
+                SelectNextTree();
             }
         }
-        else
+    }
+
+    private void SelectNextTree()
+    {
+        // Pick the nearest uncut tree
+        float minDist = float.MaxValue;
+        GameObject nearestTree = null;
+        foreach (var tree in trees)
         {
-            // This code runs if agentMove is false.
-            // (Idle / do nothing for now)
+            if (tree == null)
+                continue;
+            float d = Vector3.Distance(transform.position, tree.transform.position);
+            if (d < minDist)
+            {
+                minDist = d;
+                nearestTree = tree;
+            }
         }
+        currentTree = nearestTree;
+    }
+
+    private IEnumerator CutTreeRoutine(GameObject treeToCut)
+    {
+        if (treeToCut == null)
+            yield break;
+
+        cutting = true;
+
+        // Optional: Force idle animation
+        agent.ForceIdle();
+
+        // Wait for cutting
+        yield return new WaitForSeconds(cuttingTime);
+
+        // Spawn wood logs
+        for (int i = 0; i < woodYield; i++)
+        {
+            Vector3 spawnPos =
+                treeToCut.transform.position
+                + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
+            GameObject log = Instantiate(woodLogPrefab, spawnPos, Quaternion.identity);
+            Collider col = log.GetComponent<Collider>();
+            if (col != null)
+                col.isTrigger = true;
+            log.tag = "WoodLog";
+        }
+
+        // Destroy the tree
+        trees.Remove(treeToCut);
+        Destroy(treeToCut);
+
+        // Small pause
+        yield return new WaitForSeconds(1f);
+
+        cutting = false;
+
+        // Go back along A* path
+        currentTargetArrayIndex = 0;
+        aStarPath = aStarManager.PathfindAStar(end, start);
+        agentMove = true;
     }
 
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("WoodLog"))
         {
-            // Add parcel to agent
             if (parcelSystem != null)
             {
                 parcelSystem.AddParcel();
             }
-
-            Destroy(other.gameObject); // remove log from the world
-            Debug.Log("Picked up a wood log!");
+            Destroy(other.gameObject);
         }
-    }
-
-    private IEnumerator CutTree()
-    {
-        cutting = true;
-        goingToTree = false;
-
-        Debug.Log("Cutting tree...");
-
-        // Save tree position & rotation BEFORE destroying
-        Vector3 basePos = tree.transform.position;
-        basePos.y = transform.position.y;
-        Quaternion rot = tree.transform.rotation;
-
-        // Wait for cutting animation / time
-        yield return new WaitForSeconds(cuttingTime);
-
-        // Remove tree
-        Destroy(tree);
-
-        // Spawn multiple wood logs
-        for (int i = 0; i < woodYield; i++)
-        {
-            Vector3 spawnPos =
-                basePos + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
-
-            GameObject log = Instantiate(woodLogPrefab, spawnPos, rot);
-
-            // Make sure the log has a trigger collider and tag
-            Collider col = log.GetComponent<Collider>();
-            if (col != null)
-            {
-                col.isTrigger = true;
-            }
-
-            log.tag = "WoodLog";
-        }
-
-        Debug.Log($"Spawned {woodYield} wood logs");
-
-        // Small pause so player can SEE the wood
-        yield return new WaitForSeconds(3f);
-
-        // Return to waypoint
-        aStarPath = aStarManager.PathfindAStar(end, start);
-        currentTargetArrayIndex = 0;
-        agentMove = true;
-
-        cutting = false;
     }
 }
