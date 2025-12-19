@@ -42,13 +42,25 @@ public class AgentCoordinationController : MonoBehaviour
 
     void Update()
     {
-        // Check if stuck
-        if (Vector3.Distance(transform.position, lastPosition) < 0.1f)
+        // Check if stuck - but only if agent is actually trying to move
+        // Don't count as stuck if agent is cutting, waiting at waypoint, or legitimately stopped
+        PathfindingTester pathfinder = GetComponent<PathfindingTester>();
+        bool isCutting = pathfinder != null && pathfinder.IsCutting();
+
+        if (!isCutting)
         {
-            stuckTimer += Time.deltaTime;
+            if (Vector3.Distance(transform.position, lastPosition) < 0.1f)
+            {
+                stuckTimer += Time.deltaTime;
+            }
+            else
+            {
+                stuckTimer = 0f;
+            }
         }
         else
         {
+            // Reset stuck timer when cutting (not actually stuck)
             stuckTimer = 0f;
         }
         lastPosition = transform.position;
@@ -81,6 +93,12 @@ public class AgentCoordinationController : MonoBehaviour
 
     public float GetNegotiatedSpeed(float baseSpeed)
     {
+        var pathTester = GetComponent<PathfindingTester>();
+        if (pathTester != null && pathTester.IsLeavingDeliveryPoint())
+        {
+            return baseSpeed; // ignore coordination temporarily
+        }
+
         desiredSpeed = baseSpeed;
         isWaitingForOtherAgent = false;
 
@@ -116,6 +134,10 @@ public class AgentCoordinationController : MonoBehaviour
 
     public bool ShouldStopBeforeWaypoint(Vector3 waypointPosition)
     {
+        var pathTester = GetComponent<PathfindingTester>();
+        if (pathTester != null && pathTester.IsLeavingDeliveryPoint())
+            return false; // DO NOT STOP when exiting delivery
+
         foreach (var other in AllAgents)
         {
             if (other == this)
@@ -156,7 +178,7 @@ public class AgentCoordinationController : MonoBehaviour
     {
         // Use BASE speed with parcels, not negotiated speed
         float baseSpeedWithParcels = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : 1f;
-        
+
         // Normalize speed factor (assuming max speed around 8-10)
         float speedFactor = baseSpeedWithParcels / 8f;
 
@@ -165,12 +187,12 @@ public class AgentCoordinationController : MonoBehaviour
         float distanceToDest = myDir.magnitude;
         myDir.Normalize();
         float directionFactor = Vector3.Dot(transform.forward, myDir);
-        
+
         // Distance factor (closer = higher priority, but normalize)
         float distanceFactor = 1f / (1f + distanceToDest * 0.1f);
 
-        return (speedFactor * speedWeight) + 
-               (directionFactor * directionWeight) + 
+        return (speedFactor * speedWeight) +
+               (directionFactor * directionWeight) +
                (distanceFactor * distanceWeight);
     }
 }

@@ -45,11 +45,21 @@ public class PathfindingTester : MonoBehaviour
     private bool cutting = false;
     private bool isIdle = false;
 
+    public bool IsCutting()
+    {
+        return cutting;
+    }
+
     private Agent agent;
     private Part2_ParcelSystem parcelSystem;
     private GameObject currentTree;
     private float finalSpeed;
     private bool hasParcels = false; // Track if agent is carrying parcels
+    private bool returningToStart = false;
+    private bool leavingDeliveryPoint = false;
+    private bool deliveryCompleted = false;
+
+
 
     void Start()
     {
@@ -156,6 +166,20 @@ public class PathfindingTester : MonoBehaviour
         // Check for rerouting if stuck
         CheckAndRerouteIfStuck();
 
+        if (leavingDeliveryPoint && deliveryPoint != null)
+        {
+            float dist = Vector3.Distance(transform.position, deliveryPoint.transform.position);
+            Debug.Log($"{name} leavingDeliveryPoint dist={dist}");
+
+            if (dist > 4f) // safely outside trigger + stop zone
+            {
+                Debug.Log($"{name} fully left delivery point");
+                leavingDeliveryPoint = false;
+                deliveryCompleted = false; // reset for next delivery
+            }
+        }
+
+
         // Check if agent should move to delivery point (if has parcels and delivery point exists)
         if (hasParcels && deliveryPoint != null && currentTree == null && !agentMove)
         {
@@ -166,6 +190,14 @@ public class PathfindingTester : MonoBehaviour
         // Move to tree if agent reached the end of path
         if (currentTree != null && !cutting)
         {
+            // Check if tree still exists (might have been destroyed by another agent)
+            if (currentTree == null || !trees.Contains(currentTree))
+            {
+                currentTree = null;
+                SelectNextTree();
+                return;
+            }
+
             Vector3 targetPos = new Vector3(
                 currentTree.transform.position.x,
                 transform.position.y,
@@ -175,15 +207,13 @@ public class PathfindingTester : MonoBehaviour
             Vector3 dir = targetPos - transform.position;
             float dist = dir.magnitude;
 
-            Debug.Log(name + " moving towards " + currentTree.name);
-
             if (dist > 1.5f)
             {
                 dir.Normalize();
                 Quaternion rot = Quaternion.LookRotation(dir);
                 transform.rotation = rot;
 
-                Vector3 move = dir.normalized ;
+                Vector3 move = dir.normalized;
                 move.y = 0;
 
                 float baseSpeed =
@@ -204,11 +234,23 @@ public class PathfindingTester : MonoBehaviour
                 {
                     agent.SetCurrentSpeed(finalSpeed);
                 }
-                controller.Move(move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
+                controller.Move(
+                    move * finalSpeed * Time.deltaTime
+                        + Vector3.up * Physics.gravity.y * Time.deltaTime
+                );
             }
             else
             {
-                StartCoroutine(CutTreeRoutine(currentTree));
+                // Reached tree, start cutting
+                if (currentTree != null)
+                {
+                    StartCoroutine(CutTreeRoutine(currentTree));
+                }
+                else
+                {
+                    // Tree was destroyed, select new one
+                    SelectNextTree();
+                }
             }
         }
         else if (agentMove)
@@ -217,21 +259,47 @@ public class PathfindingTester : MonoBehaviour
         }
     }
 
+
+    public bool IsLeavingDeliveryPoint()
+    {
+        return leavingDeliveryPoint;
+    }
+
+
     private void CheckAndRerouteIfStuck()
     {
+        // Don't check for rerouting if cutting or moving to tree directly
+        if (cutting || (currentTree != null && !agentMove))
+            return;
+
         var coordinator = GetComponent<AgentCoordinationController>();
         if (coordinator != null && coordinator.ShouldReroute())
         {
             Debug.Log($"{name} is stuck, attempting reroute...");
-            
+
             // Try to find alternative path
-            if (currentTargetArrayIndex < aStarPath.Count - 1)
+            if (
+                aStarPath != null
+                && aStarPath.Count > 0
+                && currentTargetArrayIndex < aStarPath.Count - 1
+            )
             {
                 // Skip current waypoint and recalculate
                 GameObject newStart = aStarPath[currentTargetArrayIndex].ToNode;
-                aStarPath = aStarManager.PathfindAStar(newStart, end);
-                currentTargetArrayIndex = 0;
-                // Note: stuckTimer is managed in AgentCoordinationController
+                if (newStart != null)
+                {
+                    // Determine destination based on current state
+                    GameObject destination =
+                        hasParcels && deliveryPoint != null
+                            ? FindNearestWaypoint(deliveryPoint.transform.position)
+                            : end;
+
+                    if (destination != null)
+                    {
+                        aStarPath = aStarManager.PathfindAStar(newStart, destination);
+                        currentTargetArrayIndex = 0;
+                    }
+                }
             }
         }
     }
@@ -257,12 +325,12 @@ public class PathfindingTester : MonoBehaviour
 
         if (distance > 0.001f)
         {
-
             var coordinator = GetComponent<AgentCoordinationController>();
 
             // Check if should stop before waypoint
             if (coordinator != null && coordinator.ShouldStopBeforeWaypoint(currentTargetPos))
             {
+                Debug.Log($"{name} STOPPED before waypoint due to coordination");
                 // Stop and wait
                 if (agent != null)
                 {
@@ -297,7 +365,11 @@ public class PathfindingTester : MonoBehaviour
                 agent.SetCurrentSpeed(finalSpeed);
             }
 
-            controller.Move(move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
+            Debug.Log($"{name} finalSpeed={finalSpeed}, returning={returningToStart}, leavingDelivery={leavingDeliveryPoint}");
+
+            controller.Move(
+                move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime
+            );
         }
 
         if (distance < 1.5f)
@@ -306,37 +378,37 @@ public class PathfindingTester : MonoBehaviour
             if (currentTargetArrayIndex == aStarPath.Count)
             {
                 agentMove = false;
-                
-                // If agent has parcels and reached end of path, check if at delivery point
-                if (hasParcels && deliveryPoint != null)
+
+                // Finished RETURNING to start
+                if (returningToStart)
                 {
-                    float distToDelivery = Vector3.Distance(transform.position, deliveryPoint.transform.position);
-                    if (distToDelivery < 3f)
-                    {
-                        // At delivery point, deliver parcels
-                        DeliverParcels();
-                    }
-                    else
-                    {
-                        // Not at delivery point yet, will move directly to it in Update()
-                        // agentMove is false, so Update() will call MoveToDeliveryPoint()
-                    }
-                }
-                else
-                {
-                    // No parcels or no delivery point, select next tree
+                    returningToStart = false;
                     SelectNextTree();
                 }
+
+                // Finished GOING TO TREE / START
+                SelectNextTree();
             }
         }
     }
 
     private void SelectNextTree()
     {
+        // Clear current tree reference first
+        currentTree = null;
+
         float minDist = float.MaxValue;
         GameObject nearestTree = null;
 
+        // Create a copy of trees list to avoid modification during iteration
+        List<GameObject> validTrees = new List<GameObject>();
         foreach (var tree in trees)
+        {
+            if (tree != null)
+                validTrees.Add(tree);
+        }
+
+        foreach (var tree in validTrees)
         {
             if (tree == null)
                 continue;
@@ -359,6 +431,11 @@ public class PathfindingTester : MonoBehaviour
                 currentTree = nearestTree;
                 Debug.Log(name + " RESERVED tree: " + currentTree.name);
             }
+            else
+            {
+                // Tree was reserved by another agent, try again
+                currentTree = null;
+            }
         }
         else
         {
@@ -370,9 +447,14 @@ public class PathfindingTester : MonoBehaviour
     private IEnumerator CutTreeRoutine(GameObject treeToCut)
     {
         if (treeToCut == null)
+        {
+            cutting = false;
+            currentTree = null;
             yield break;
+        }
 
         cutting = true;
+        currentTree = null; // Clear current tree reference immediately
 
         // Optional: Force idle animation
         agent.ForceIdle();
@@ -380,12 +462,14 @@ public class PathfindingTester : MonoBehaviour
         // Wait for cutting
         yield return new WaitForSeconds(cuttingTime);
 
+        // Store tree position before destroying
+        Vector3 treePosition = treeToCut.transform.position;
+
         // Spawn wood logs
         for (int i = 0; i < woodYield; i++)
         {
             Vector3 spawnPos =
-                treeToCut.transform.position
-                + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
+                treePosition + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
             GameObject log = Instantiate(woodLogPrefab, spawnPos, Quaternion.identity);
             Collider col = log.GetComponent<Collider>();
             if (col != null)
@@ -405,7 +489,7 @@ public class PathfindingTester : MonoBehaviour
 
         // After cutting, agent has parcels, go to delivery point
         hasParcels = true;
-        
+
         // If delivery point exists, go there. Otherwise go back to start
         if (deliveryPoint != null)
         {
@@ -447,7 +531,7 @@ public class PathfindingTester : MonoBehaviour
         else if (other.CompareTag("DeliveryPoint"))
         {
             // Agent reached delivery point
-            if (hasParcels && parcelSystem != null && parcelSystem.parcelCount > 0)
+            if (!deliveryCompleted && hasParcels && parcelSystem != null && parcelSystem.parcelCount > 0)
             {
                 DeliverParcels();
             }
@@ -494,7 +578,9 @@ public class PathfindingTester : MonoBehaviour
             {
                 agent.SetCurrentSpeed(finalSpeed);
             }
-            controller.Move(move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
+            controller.Move(
+                move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime
+            );
         }
         else
         {
@@ -505,41 +591,44 @@ public class PathfindingTester : MonoBehaviour
 
     private void DeliverParcels()
     {
+        if (deliveryCompleted)
+            return;
+
         if (parcelSystem == null)
             return;
 
         int deliveredCount = parcelSystem.parcelCount;
-        if (deliveredCount > 0)
-        {
-            Debug.Log($"{name} delivered {deliveredCount} parcels at delivery point!");
-            parcelSystem.ClearParcels();
-            hasParcels = false;
+        if (deliveredCount <= 0)
+            return;
 
-            // After delivery, go back to start and select next tree
-            // Find nearest waypoint to delivery point and start for pathfinding
-            GameObject nearestToDelivery = FindNearestWaypoint(deliveryPoint.transform.position);
-            GameObject nearestToStart = FindNearestWaypoint(start.transform.position);
-            
-            if (nearestToDelivery != null && nearestToStart != null)
-            {
-                currentTargetArrayIndex = 0;
-                aStarPath = aStarManager.PathfindAStar(nearestToDelivery, nearestToStart);
-                agentMove = true;
-            }
-            else if (nearestToStart != null)
-            {
-                // Fallback: just pathfind to start from current position's nearest waypoint
-                GameObject currentNearest = FindNearestWaypoint(transform.position);
-                if (currentNearest != null)
-                {
-                    currentTargetArrayIndex = 0;
-                    aStarPath = aStarManager.PathfindAStar(currentNearest, nearestToStart);
-                    agentMove = true;
-                }
-            }
-            
-            SelectNextTree();
+        deliveryCompleted = true;
+
+        Debug.Log($"{name} delivered {deliveredCount} parcels!");
+
+        //clear parcels
+        parcelSystem.ClearParcels();
+        hasParcels = false;
+
+        //switch states
+        returningToStart = true;
+        leavingDeliveryPoint = true;
+
+        GameObject from = FindNearestWaypoint(transform.position);
+        GameObject to = FindNearestWaypoint(start.transform.position);
+
+        if (from != null && to != null)
+        {
+            currentTargetArrayIndex = 0;
+            aStarPath = aStarManager.PathfindAStar(from, to);
+            agentMove = true;
+
+            Debug.Log($"{name} delivery complete → returning to start from {from.name} to {to.name}");
         }
+        else
+        {
+            Debug.LogWarning($"{name} could not find waypoints to return to start");
+        }
+
     }
 
     private GameObject FindNearestWaypoint(Vector3 position)
