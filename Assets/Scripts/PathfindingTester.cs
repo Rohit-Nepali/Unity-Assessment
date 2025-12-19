@@ -263,6 +263,21 @@ public class PathfindingTester : MonoBehaviour
         }
     }
 
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("WoodLog"))
+        {
+            // Add parcel to agent
+            if (parcelSystem != null)
+            {
+                parcelSystem.AddParcel();
+            }
+
+            Destroy(other.gameObject); // remove log from the world
+            Debug.Log("Picked up a wood log!");
+        }
+    }
+
     private IEnumerator CutTree()
     {
         cutting = true;
@@ -285,15 +300,24 @@ public class PathfindingTester : MonoBehaviour
         for (int i = 0; i < woodYield; i++)
         {
             Vector3 spawnPos =
-                basePos + new Vector3(Random.Range(-0.5f, 0.5f), 0.3f, Random.Range(-0.5f, 0.5f));
+                basePos + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
 
-            Instantiate(woodLogPrefab, spawnPos, rot);
+            GameObject log = Instantiate(woodLogPrefab, spawnPos, rot);
+
+            // Make sure the log has a trigger collider and tag
+            Collider col = log.GetComponent<Collider>();
+            if (col != null)
+            {
+                col.isTrigger = true;
+            }
+
+            log.tag = "WoodLog";
         }
 
         Debug.Log($"Spawned {woodYield} wood logs");
 
         // Small pause so player can SEE the wood
-        yield return new WaitForSeconds(2f);
+        yield return new WaitForSeconds(3f);
 
         // Return to waypoint
         aStarPath = aStarManager.PathfindAStar(end, start);

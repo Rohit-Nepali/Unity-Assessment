@@ -6,6 +6,7 @@ TagManager:
   tags:
   - CinemachineTarget
   - Waypoint
+  - WoodLog
   layers:
   - Default
   - TransparentFX

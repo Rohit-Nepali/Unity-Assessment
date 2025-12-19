@@ -6,9 +6,15 @@ public class Part2_ParcelSystem : MonoBehaviour
     [Range(0, 10)]
     public int parcelCount = 0;
 
+    public int maxParcels = 10; // <-- declare maxParcels
+
     public float baseSpeed = 2.5f;
 
     public float CurrentSpeedMultiplier { get; private set; } = 1f;
+
+    [Header("Parcel Visuals")]
+    public Transform parcelVisualParent; // parent to attach parcel visuals
+    public GameObject parcelVisualPrefab; // prefab for a single parcel visual
 
     void Update()
     {
@@ -26,5 +32,25 @@ public class Part2_ParcelSystem : MonoBehaviour
     public float GetModifiedSpeed()
     {
         return baseSpeed * CurrentSpeedMultiplier;
+    }
+
+    public void AddParcel()
+    {
+        if (parcelCount < maxParcels)
+        {
+            parcelCount++;
+            Debug.Log($"Parcel picked up! Total: {parcelCount}");
+
+            // Spawn visual if prefab and parent exist
+            if (parcelVisualPrefab != null && parcelVisualParent != null)
+            {
+                GameObject parcelVisual = Instantiate(parcelVisualPrefab, parcelVisualParent);
+                parcelVisual.transform.localPosition = new Vector3(0, 0.3f * parcelCount, 0); // stack nicely
+            }
+        }
+        else
+        {
+            Debug.Log("Parcel limit reached!");
+        }
     }
 }
