@@ -58,12 +58,16 @@ public class QuadrantUIManager : MonoBehaviour
     {
         Agent agent = quadUI.agent;
         Part2_ParcelSystem parcelSystem = agent.GetComponent<Part2_ParcelSystem>();
+        PathfindingTester pathfinder = agent.GetComponent<PathfindingTester>();
 
         int parcels = parcelSystem != null ? parcelSystem.parcelCount : 0;
 
-        // Time (per agent)
-        quadUI.timer += Time.deltaTime;
-
+        // Only increment timer if agent is NOT idle at start
+        bool isIdleAtStart = pathfinder != null && pathfinder.IsIdleAtStart();
+        if (!isIdleAtStart)
+        {
+            quadUI.timer += Time.deltaTime;
+        }
         // Distance (per agent)
         Vector3 delta = agent.transform.position - quadUI.lastPosition;
         Vector3 horizontalDelta = new Vector3(delta.x, 0f, delta.z);

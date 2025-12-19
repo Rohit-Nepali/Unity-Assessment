@@ -59,7 +59,25 @@ public class PathfindingTester : MonoBehaviour
     private bool leavingDeliveryPoint = false;
     private bool deliveryCompleted = false;
 
+    public bool IsReturningToStart()
+    {
+        return returningToStart;
+    }
+    // PathfindingTester.cs
+    public bool IsIdleAtStart()
+    {
+        // Agent is idle if:
+        // 1. Not moving along path
+        // 2. Not cutting
+        // 3. Returning to start has finished
+        return !agentMove && !cutting && !hasParcels && !leavingDeliveryPoint;
+    }
 
+
+    public bool agentMoveActive()
+    {
+        return agentMove;
+    }
 
     void Start()
     {
@@ -139,6 +157,13 @@ public class PathfindingTester : MonoBehaviour
         // Select the first available tree
         SelectNextTree();
     }
+
+    public GameObject GetCurrentTree()
+    {
+        return currentTree;
+    }
+
+
 
     void OnDrawGizmos()
     {
@@ -325,35 +350,39 @@ public class PathfindingTester : MonoBehaviour
 
         if (distance > 0.001f)
         {
-            var coordinator = GetComponent<AgentCoordinationController>();
-
-            // Check if should stop before waypoint
-            if (coordinator != null && coordinator.ShouldStopBeforeWaypoint(currentTargetPos))
-            {
-                Debug.Log($"{name} STOPPED before waypoint due to coordination");
-                // Stop and wait
-                if (agent != null)
-                {
-                    agent.SetCurrentSpeed(0f);
-                }
-                return; // Don't move this frame
-            }
-
             direction.y = 0;
             Quaternion rotation = Quaternion.LookRotation(direction, Vector3.up);
             transform.rotation = rotation;
 
             Vector3 normDirection = direction / distance;
-            Vector3 move = normDirection;
+            Vector3 move = normDirection; // define move first
             move.y = 0;
+
+            var coordinator = GetComponent<AgentCoordinationController>();
+            if (coordinator != null)
+            {
+                // Apply avoidance vector
+                Vector3 avoidance = coordinator.GetAvoidanceVector(returningToStart, hasParcels);
+                move += avoidance;
+                move = move.normalized; // normalize after adding avoidance
+            }
 
             float baseSpeed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
 
-            // coordinator already declared above, reuse it
+            // Coordinator negotiation
             if (coordinator != null)
             {
                 coordinator.SetDestination(currentTargetPos);
                 finalSpeed = coordinator.GetNegotiatedSpeed(baseSpeed);
+
+                // Check if should stop before waypoint
+                if (coordinator.ShouldStopBeforeWaypoint(currentTargetPos))
+                {
+                    Debug.Log($"{name} STOPPED before waypoint due to coordination");
+                    if (agent != null)
+                        agent.SetCurrentSpeed(0f);
+                    return; // skip movement this frame
+                }
             }
             else
             {
@@ -361,11 +390,7 @@ public class PathfindingTester : MonoBehaviour
             }
 
             if (agent != null)
-            {
                 agent.SetCurrentSpeed(finalSpeed);
-            }
-
-            Debug.Log($"{name} finalSpeed={finalSpeed}, returning={returningToStart}, leavingDelivery={leavingDeliveryPoint}");
 
             controller.Move(
                 move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime
@@ -383,14 +408,21 @@ public class PathfindingTester : MonoBehaviour
                 if (returningToStart)
                 {
                     returningToStart = false;
+                    // Agent has returned to start, go idle
+                    agentMove = false;
+                    if (agent != null)
+                        agent.ForceIdle();  // Set idle animation/state
+                }
+                else
+                {
+                    // Finished GOING TO TREE if not returning
                     SelectNextTree();
                 }
 
-                // Finished GOING TO TREE / START
-                SelectNextTree();
             }
         }
     }
+
 
     private void SelectNextTree()
     {
