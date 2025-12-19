@@ -5,8 +5,6 @@ using UnityEngine;
 
 public class PathfindingTester : MonoBehaviour
 {
-    // private Animator anim;
-    // private Vector3 animLastPos;
     private CharacterController controller;
 
     // The A* manager.
@@ -37,19 +35,13 @@ public class PathfindingTester : MonoBehaviour
     private Vector3 currentTargetPos;
     private bool agentMove = true;
 
-    // Route Timer.
-    private float timer = 0f;
-
-    // Distance Calculator.
-    private float totalDistance = 0f;
-    private Vector3 lastPosition = Vector3.zero;
-
     public GameObject tree;
     public GameObject woodLogPrefab;
     public float cuttingTime = 4f;
 
     private bool goingToTree = false;
     private bool cutting = false;
+    private bool isIdle = false;
 
     [Header("Harvest Settings")]
     public int woodYield = 4; // How many logs one tree produces
@@ -129,8 +121,6 @@ public class PathfindingTester : MonoBehaviour
             Debug.Log("Warning, A* did not return a path between the start and end node.");
             agentMove = false;
         }
-
-        lastPosition = transform.position;
     }
 
     // Draws debug objects in the editor and during editor play (if option set).
@@ -152,10 +142,6 @@ public class PathfindingTester : MonoBehaviour
             );
         }
     }
-
-    // Update is called once per frame
-    // [Header("UI Display")]
-    // public TMP_Text agentInfoText; // Drag the UI Text here in Inspector
 
     void Update()
     {
@@ -183,6 +169,7 @@ public class PathfindingTester : MonoBehaviour
             else
             {
                 // Stop the agent
+                isIdle = true;
                 controller.Move(Vector3.zero);
 
                 // Tell Agent.cs to set speed to 0
@@ -203,13 +190,6 @@ public class PathfindingTester : MonoBehaviour
                 agentMove = false;
                 return;
             }
-
-            // Timer and distance travelled.
-            Vector3 tmpDir = transform.position - lastPosition;
-            float tmpDistance = tmpDir.magnitude;
-            totalDistance += tmpDistance;
-            lastPosition = transform.position;
-            timer += Time.deltaTime;
 
             // Set the current target.
             currentTargetPos = aStarPath[currentTargetArrayIndex].ToNode.transform.position;
@@ -264,21 +244,6 @@ public class PathfindingTester : MonoBehaviour
             // This code runs if agentMove is false.
             // (Idle / do nothing for now)
         }
-
-        // // ------ UI UPDATE ------
-        // if (agentInfoText != null)
-        // {
-        //     float animSpeed = GetComponent<Agent>().currentSpeed; // NEW
-
-        //     const int maxLabelLength = 9; // "Distance:" is the longest label at 9 chars
-
-        //     agentInfoText.text =
-        //         $"<color=#FFFFFF><b>Path:</b></color>{new string(' ', maxLabelLength - 5)}<color=#FFFFFF>Metric Info</color>\n"
-        //         + $"<color=#FFFFFF><b>Time:</b></color>{new string(' ', maxLabelLength - 5)}{timer:F2} s\n"
-        //         + $"<color=#FFFFFF><b>Agent:</b></color>{new string(' ', maxLabelLength - 6)}{gameObject.name}\n"
-        //         + $"<color=#FFFFFF><b>Speed:</b></color>{new string(' ', maxLabelLength - 6)}{animSpeed:F2} u/s\n"
-        //         + $"<color=#FFFFFF><b>Distance:</b></color>{new string(' ', maxLabelLength - 9)}{totalDistance:F2} units";
-        // }
     }
 
     private IEnumerator CutTree()
