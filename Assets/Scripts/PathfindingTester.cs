@@ -22,6 +22,9 @@ public class PathfindingTester : MonoBehaviour
     [SerializeField]
     private GameObject end;
 
+    [SerializeField]
+    private GameObject deliveryPoint; // Delivery location for parcels
+
     // Debug line offset.
     private Vector3 offset = new Vector3(0, 0.3f, 0);
 
@@ -45,6 +48,8 @@ public class PathfindingTester : MonoBehaviour
     private Agent agent;
     private Part2_ParcelSystem parcelSystem;
     private GameObject currentTree;
+    private float finalSpeed;
+    private bool hasParcels = false; // Track if agent is carrying parcels
 
     void Start()
     {
@@ -148,6 +153,16 @@ public class PathfindingTester : MonoBehaviour
         if (cutting)
             return; // Do not move while cutting
 
+        // Check for rerouting if stuck
+        CheckAndRerouteIfStuck();
+
+        // Check if agent should move to delivery point (if has parcels and delivery point exists)
+        if (hasParcels && deliveryPoint != null && currentTree == null && !agentMove)
+        {
+            MoveToDeliveryPoint();
+            return;
+        }
+
         // Move to tree if agent reached the end of path
         if (currentTree != null && !cutting)
         {
@@ -160,21 +175,36 @@ public class PathfindingTester : MonoBehaviour
             Vector3 dir = targetPos - transform.position;
             float dist = dir.magnitude;
 
+            Debug.Log(name + " moving towards " + currentTree.name);
+
             if (dist > 1.5f)
             {
                 dir.Normalize();
                 Quaternion rot = Quaternion.LookRotation(dir);
                 transform.rotation = rot;
 
-                Vector3 move = dir * currentSpeed;
-                move.y += Physics.gravity.y;
+                Vector3 move = dir.normalized ;
+                move.y = 0;
 
-                float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
+                float baseSpeed =
+                    parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
+
+                var coordinator = GetComponent<AgentCoordinationController>();
+                if (coordinator != null)
+                {
+                    coordinator.SetDestination(targetPos);
+                    finalSpeed = coordinator.GetNegotiatedSpeed(baseSpeed);
+                }
+                else
+                {
+                    finalSpeed = baseSpeed;
+                }
+
                 if (agent != null)
                 {
-                    agent.SetCurrentSpeed(speed);
+                    agent.SetCurrentSpeed(finalSpeed);
                 }
-                controller.Move(move * speed * Time.deltaTime);
+                controller.Move(move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
             }
             else
             {
@@ -184,6 +214,25 @@ public class PathfindingTester : MonoBehaviour
         else if (agentMove)
         {
             MoveAlongPath();
+        }
+    }
+
+    private void CheckAndRerouteIfStuck()
+    {
+        var coordinator = GetComponent<AgentCoordinationController>();
+        if (coordinator != null && coordinator.ShouldReroute())
+        {
+            Debug.Log($"{name} is stuck, attempting reroute...");
+            
+            // Try to find alternative path
+            if (currentTargetArrayIndex < aStarPath.Count - 1)
+            {
+                // Skip current waypoint and recalculate
+                GameObject newStart = aStarPath[currentTargetArrayIndex].ToNode;
+                aStarPath = aStarManager.PathfindAStar(newStart, end);
+                currentTargetArrayIndex = 0;
+                // Note: stuckTimer is managed in AgentCoordinationController
+            }
         }
     }
 
@@ -208,21 +257,47 @@ public class PathfindingTester : MonoBehaviour
 
         if (distance > 0.001f)
         {
+
+            var coordinator = GetComponent<AgentCoordinationController>();
+
+            // Check if should stop before waypoint
+            if (coordinator != null && coordinator.ShouldStopBeforeWaypoint(currentTargetPos))
+            {
+                // Stop and wait
+                if (agent != null)
+                {
+                    agent.SetCurrentSpeed(0f);
+                }
+                return; // Don't move this frame
+            }
+
             direction.y = 0;
             Quaternion rotation = Quaternion.LookRotation(direction, Vector3.up);
             transform.rotation = rotation;
 
             Vector3 normDirection = direction / distance;
-            Vector3 move = normDirection * currentSpeed;
-            move.y += Physics.gravity.y;
+            Vector3 move = normDirection;
+            move.y = 0;
 
-            float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
-            if (agent != null)
+            float baseSpeed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
+
+            // coordinator already declared above, reuse it
+            if (coordinator != null)
             {
-                agent.SetCurrentSpeed(speed);
+                coordinator.SetDestination(currentTargetPos);
+                finalSpeed = coordinator.GetNegotiatedSpeed(baseSpeed);
+            }
+            else
+            {
+                finalSpeed = baseSpeed;
             }
 
-            controller.Move(move * speed * Time.deltaTime);
+            if (agent != null)
+            {
+                agent.SetCurrentSpeed(finalSpeed);
+            }
+
+            controller.Move(move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
         }
 
         if (distance < 1.5f)
@@ -231,20 +306,44 @@ public class PathfindingTester : MonoBehaviour
             if (currentTargetArrayIndex == aStarPath.Count)
             {
                 agentMove = false;
-                SelectNextTree();
+                
+                // If agent has parcels and reached end of path, check if at delivery point
+                if (hasParcels && deliveryPoint != null)
+                {
+                    float distToDelivery = Vector3.Distance(transform.position, deliveryPoint.transform.position);
+                    if (distToDelivery < 3f)
+                    {
+                        // At delivery point, deliver parcels
+                        DeliverParcels();
+                    }
+                    else
+                    {
+                        // Not at delivery point yet, will move directly to it in Update()
+                        // agentMove is false, so Update() will call MoveToDeliveryPoint()
+                    }
+                }
+                else
+                {
+                    // No parcels or no delivery point, select next tree
+                    SelectNextTree();
+                }
             }
         }
     }
 
     private void SelectNextTree()
     {
-        // Pick the nearest uncut tree
         float minDist = float.MaxValue;
         GameObject nearestTree = null;
+
         foreach (var tree in trees)
         {
             if (tree == null)
                 continue;
+
+            if (TreeReservationManager.Instance.IsTreeReserved(tree))
+                continue;
+
             float d = Vector3.Distance(transform.position, tree.transform.position);
             if (d < minDist)
             {
@@ -252,7 +351,20 @@ public class PathfindingTester : MonoBehaviour
                 nearestTree = tree;
             }
         }
-        currentTree = nearestTree;
+
+        if (nearestTree != null)
+        {
+            if (TreeReservationManager.Instance.ReserveTree(nearestTree))
+            {
+                currentTree = nearestTree;
+                Debug.Log(name + " RESERVED tree: " + currentTree.name);
+            }
+        }
+        else
+        {
+            currentTree = null;
+            Debug.Log(name + " found no trees to cut.");
+        }
     }
 
     private IEnumerator CutTreeRoutine(GameObject treeToCut)
@@ -282,6 +394,7 @@ public class PathfindingTester : MonoBehaviour
         }
 
         // Destroy the tree
+        TreeReservationManager.Instance.ReleaseTree(treeToCut);
         trees.Remove(treeToCut);
         Destroy(treeToCut);
 
@@ -290,10 +403,35 @@ public class PathfindingTester : MonoBehaviour
 
         cutting = false;
 
-        // Go back along A* path
-        currentTargetArrayIndex = 0;
-        aStarPath = aStarManager.PathfindAStar(end, start);
-        agentMove = true;
+        // After cutting, agent has parcels, go to delivery point
+        hasParcels = true;
+        
+        // If delivery point exists, go there. Otherwise go back to start
+        if (deliveryPoint != null)
+        {
+            // Find nearest waypoint to delivery point for pathfinding
+            GameObject nearestWaypoint = FindNearestWaypoint(deliveryPoint.transform.position);
+            if (nearestWaypoint != null)
+            {
+                currentTargetArrayIndex = 0;
+                aStarPath = aStarManager.PathfindAStar(end, nearestWaypoint);
+                agentMove = true;
+            }
+            else
+            {
+                // Fallback: go back to start
+                currentTargetArrayIndex = 0;
+                aStarPath = aStarManager.PathfindAStar(end, start);
+                agentMove = true;
+            }
+        }
+        else
+        {
+            // No delivery point, go back to start
+            currentTargetArrayIndex = 0;
+            aStarPath = aStarManager.PathfindAStar(end, start);
+            agentMove = true;
+        }
     }
 
     private void OnTriggerEnter(Collider other)
@@ -306,5 +444,122 @@ public class PathfindingTester : MonoBehaviour
             }
             Destroy(other.gameObject);
         }
+        else if (other.CompareTag("DeliveryPoint"))
+        {
+            // Agent reached delivery point
+            if (hasParcels && parcelSystem != null && parcelSystem.parcelCount > 0)
+            {
+                DeliverParcels();
+            }
+        }
+    }
+
+    private void MoveToDeliveryPoint()
+    {
+        if (deliveryPoint == null)
+            return;
+
+        Vector3 targetPos = new Vector3(
+            deliveryPoint.transform.position.x,
+            transform.position.y,
+            deliveryPoint.transform.position.z
+        );
+
+        Vector3 dir = targetPos - transform.position;
+        float dist = dir.magnitude;
+
+        if (dist > 1.5f)
+        {
+            dir.Normalize();
+            Quaternion rot = Quaternion.LookRotation(dir);
+            transform.rotation = rot;
+
+            Vector3 move = dir.normalized;
+            move.y = 0;
+
+            float baseSpeed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed;
+
+            var coordinator = GetComponent<AgentCoordinationController>();
+            if (coordinator != null)
+            {
+                coordinator.SetDestination(targetPos);
+                finalSpeed = coordinator.GetNegotiatedSpeed(baseSpeed);
+            }
+            else
+            {
+                finalSpeed = baseSpeed;
+            }
+
+            if (agent != null)
+            {
+                agent.SetCurrentSpeed(finalSpeed);
+            }
+            controller.Move(move * finalSpeed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
+        }
+        else
+        {
+            // Reached delivery point
+            DeliverParcels();
+        }
+    }
+
+    private void DeliverParcels()
+    {
+        if (parcelSystem == null)
+            return;
+
+        int deliveredCount = parcelSystem.parcelCount;
+        if (deliveredCount > 0)
+        {
+            Debug.Log($"{name} delivered {deliveredCount} parcels at delivery point!");
+            parcelSystem.ClearParcels();
+            hasParcels = false;
+
+            // After delivery, go back to start and select next tree
+            // Find nearest waypoint to delivery point and start for pathfinding
+            GameObject nearestToDelivery = FindNearestWaypoint(deliveryPoint.transform.position);
+            GameObject nearestToStart = FindNearestWaypoint(start.transform.position);
+            
+            if (nearestToDelivery != null && nearestToStart != null)
+            {
+                currentTargetArrayIndex = 0;
+                aStarPath = aStarManager.PathfindAStar(nearestToDelivery, nearestToStart);
+                agentMove = true;
+            }
+            else if (nearestToStart != null)
+            {
+                // Fallback: just pathfind to start from current position's nearest waypoint
+                GameObject currentNearest = FindNearestWaypoint(transform.position);
+                if (currentNearest != null)
+                {
+                    currentTargetArrayIndex = 0;
+                    aStarPath = aStarManager.PathfindAStar(currentNearest, nearestToStart);
+                    agentMove = true;
+                }
+            }
+            
+            SelectNextTree();
+        }
+    }
+
+    private GameObject FindNearestWaypoint(Vector3 position)
+    {
+        GameObject nearest = null;
+        float minDist = float.MaxValue;
+
+        foreach (GameObject waypoint in waypoints)
+        {
+            if (waypoint == null)
+                continue;
+
+            float dist = Vector3.Distance(position, waypoint.transform.position);
+            if (dist < minDist)
+            {
+                minDist = dist;
+                nearest = waypoint;
+            }
+        }
+
+        return nearest;
     }
 }
