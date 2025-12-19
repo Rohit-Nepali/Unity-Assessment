@@ -57,6 +57,9 @@ public class QuadrantUIManager : MonoBehaviour
     private void UpdateQuadrantUI(ref QuadrantUI quadUI)
     {
         Agent agent = quadUI.agent;
+        Part2_ParcelSystem parcelSystem = agent.GetComponent<Part2_ParcelSystem>();
+
+        int parcels = parcelSystem != null ? parcelSystem.parcelCount : 0;
 
         // Time (per agent)
         quadUI.timer += Time.deltaTime;
@@ -75,7 +78,8 @@ public class QuadrantUIManager : MonoBehaviour
             $"<color=#FFFF00><b>Agent:</b></color> {agent.gameObject.name}\n"
             + $"<color=#00FF00><b>Time:</b></color> {quadUI.timer:F2}s\n"
             + $"<color=#00FFFF><b>Speed:</b></color> {animSpeed:F2} u/s\n"
-            + $"<color=#FF00FF><b>Distance:</b></color> {quadUI.totalDistance:F2} units";
+            + $"<color=#FF00FF><b>Distance:</b></color> {quadUI.totalDistance:F2} units \n"
+            + $"<color=#FFA500><b>Parcels:</b></color> {parcels}\n";
     }
 
     // Reset method for when you want to restart the simulation

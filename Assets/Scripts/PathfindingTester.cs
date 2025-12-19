@@ -46,9 +46,14 @@ public class PathfindingTester : MonoBehaviour
     [Header("Harvest Settings")]
     public int woodYield = 4; // How many logs one tree produces
 
+    private Agent agent;
+    private Part2_ParcelSystem parcelSystem;
+
     void Start()
     {
+        agent = GetComponent<Agent>();
         controller = GetComponent<CharacterController>();
+        parcelSystem = GetComponent<Part2_ParcelSystem>();
 
         if (start == null || end == null)
         {
@@ -164,7 +169,14 @@ public class PathfindingTester : MonoBehaviour
 
                 Vector3 move = dir * currentSpeed;
                 move.y += Physics.gravity.y;
-                controller.Move(move * Time.deltaTime);
+
+                // 2️⃣ Decide speed
+                float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed; // fallback if parcel system is missing
+                if (agent != null)
+                {
+                    agent.SetCurrentSpeed(speed);
+                }
+                controller.Move(move * speed * Time.deltaTime);
             }
             else
             {
@@ -219,8 +231,13 @@ public class PathfindingTester : MonoBehaviour
                 move.y += Physics.gravity.y;
 
                 // Move the game object.
-                controller.Move(move * Time.deltaTime);
-                // transform.position += normDirection * currentSpeed * Time.deltaTime;
+                // Decide speed
+                float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : currentSpeed; // fallback if parcel system is missing
+                if (agent != null)
+                {
+                    agent.SetCurrentSpeed(speed);
+                }
+                controller.Move(move * speed * Time.deltaTime);
             }
 
             // Check if close to current target.
