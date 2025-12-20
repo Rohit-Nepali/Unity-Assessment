@@ -41,7 +41,6 @@ public class QuadrantUIManager : MonoBehaviour
             }
         }
     }
-
     void Update()
     {
         // Update UI for each quadrant
@@ -53,7 +52,6 @@ public class QuadrantUIManager : MonoBehaviour
             }
         }
     }
-
     private void UpdateQuadrantUI(ref QuadrantUI quadUI)
     {
         Agent agent = quadUI.agent;

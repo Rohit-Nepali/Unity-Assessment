@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+[DisallowMultipleComponent]
 public class AgentCoordinationController : MonoBehaviour
 {
-    public static List<AgentCoordinationController> AllAgents = new List<AgentCoordinationController>();
+    public static readonly List<AgentCoordinationController> AllAgents = new();
 
     [Header("Safety Zones")]
     public float slowZoneRadius = 4f;
@@ -11,33 +12,35 @@ public class AgentCoordinationController : MonoBehaviour
     public float waypointStopDistance = 3f;
 
     [Header("Priority Weights")]
-    public float speedWeight = 2.0f;
-    public float directionWeight = 1.0f;
+    public float speedWeight = 2f;
+    public float directionWeight = 1f;
     public float distanceWeight = 0.5f;
 
-    private CharacterController controller;
     private Agent agent;
     private Part2_ParcelSystem parcelSystem;
+    private PathfindingTester pathfinder;
+
     private Vector3 currentDestination;
-    private float desiredSpeed;
-    private float stuckTimer = 0f;
-    private const float STUCK_THRESHOLD = 3f;
     private Vector3 lastPosition;
-    private bool isWaitingForOtherAgent = false;
+
+    private float stuckTimer;
+    private bool isWaitingForOtherAgent;
     private bool timerActive = true;
 
-    public bool IsTimerActive() => timerActive;
-    public float GetStuckTimer() => stuckTimer;
+    private const float STUCK_THRESHOLD = 3f;
+
+    // -------------------- LIFECYCLE --------------------
 
     void Awake()
     {
         AllAgents.Add(this);
-        controller = GetComponent<CharacterController>();
+
         agent = GetComponent<Agent>();
         parcelSystem = GetComponent<Part2_ParcelSystem>();
+        pathfinder = GetComponent<PathfindingTester>();
+
         lastPosition = transform.position;
     }
-
 
     void OnDestroy()
     {
@@ -46,61 +49,63 @@ public class AgentCoordinationController : MonoBehaviour
 
     void Update()
     {
-        PathfindingTester pathfinder = GetComponent<PathfindingTester>();
-        bool isCutting = pathfinder != null && pathfinder.IsCutting();
-        bool isIdleAfterReturn = pathfinder != null && !pathfinder.agentMoveActive() && pathfinder.IsReturningToStart() && !isCutting;
+        UpdateStuckTimer();
+    }
 
-        if (isIdleAfterReturn)
+    // -------------------- STUCK LOGIC --------------------
+
+    private void UpdateStuckTimer()
+    {
+        if (pathfinder == null)
+            return;
+
+        bool isCutting = pathfinder.IsCutting();
+        bool idleAtStart =
+            !pathfinder.agentMoveActive() &&
+            pathfinder.IsReturningToStart() &&
+            !isCutting;
+
+        if (idleAtStart || isCutting)
         {
-            stuckTimer = 0f; // stop timer when idle at start
+            stuckTimer = 0f;
             timerActive = false;
         }
-        else if (!isCutting)
+        else
         {
             timerActive = true;
+
             if (Vector3.Distance(transform.position, lastPosition) < 0.1f)
                 stuckTimer += Time.deltaTime;
             else
                 stuckTimer = 0f;
         }
-        else
-        {
-            timerActive = false;
-            stuckTimer = 0f;
-        }
 
         lastPosition = transform.position;
     }
+
+    public bool ShouldReroute()
+    {
+        return timerActive && stuckTimer > STUCK_THRESHOLD && isWaitingForOtherAgent;
+    }
+
+    public float GetStuckTimer() => stuckTimer;
+    public bool IsTimerActive() => timerActive;
+
+    // -------------------- DESTINATION --------------------
 
     public void SetDestination(Vector3 destination)
     {
         currentDestination = destination;
     }
 
-    public bool ShouldReroute()
-    {
-        return stuckTimer > STUCK_THRESHOLD && isWaitingForOtherAgent;
-    }
-
-    void OnDrawGizmos()
-    {
-        Gizmos.color = new Color(1f, 0f, 0f, 0.3f);
-        Gizmos.DrawSphere(transform.position, stopZoneRadius);
-
-        Gizmos.color = new Color(1f, 1f, 0f, 0.2f);
-        Gizmos.DrawSphere(transform.position, slowZoneRadius);
-
-        Gizmos.color = new Color(0f, 1f, 1f, 0.1f);
-        Gizmos.DrawSphere(transform.position, waypointStopDistance);
-    }
+    // -------------------- SPEED NEGOTIATION --------------------
 
     public float GetNegotiatedSpeed(float baseSpeed)
     {
-        var pathTester = GetComponent<PathfindingTester>();
-        if (pathTester != null && pathTester.IsLeavingDeliveryPoint())
+        if (pathfinder != null && pathfinder.IsLeavingDeliveryPoint())
             return baseSpeed;
 
-        desiredSpeed = baseSpeed;
+        float finalSpeed = baseSpeed;
         isWaitingForOtherAgent = false;
 
         foreach (var other in AllAgents)
@@ -109,130 +114,126 @@ public class AgentCoordinationController : MonoBehaviour
 
             float dist = Vector3.Distance(transform.position, other.transform.position);
 
-            if (dist < stopZoneRadius)
+            if (dist <= stopZoneRadius)
             {
-                bool hasRightOfWay = HasRightOfWayOver(other);
-                if (!hasRightOfWay)
+                if (!HasRightOfWayOver(other))
                 {
                     isWaitingForOtherAgent = true;
                     return 0f;
                 }
             }
-            else if (dist < slowZoneRadius)
+            else if (dist <= slowZoneRadius)
             {
-                bool hasRightOfWay = HasRightOfWayOver(other);
-                if (!hasRightOfWay)
+                if (!HasRightOfWayOver(other))
                 {
                     isWaitingForOtherAgent = true;
-                    desiredSpeed *= 0.4f;
+                    finalSpeed *= 0.4f;
                 }
             }
         }
 
-        return desiredSpeed;
+        return finalSpeed;
     }
 
-    public bool ShouldStopBeforeWaypoint(Vector3 waypointPosition)
+    // -------------------- WAYPOINT STOP --------------------
+
+    public bool ShouldStopBeforeWaypoint(Vector3 waypoint)
     {
-        var pathTester = GetComponent<PathfindingTester>();
-        if (pathTester != null && pathTester.IsLeavingDeliveryPoint())
+        if (pathfinder != null && pathfinder.IsLeavingDeliveryPoint())
             return false;
 
         foreach (var other in AllAgents)
         {
             if (other == this) continue;
 
-            float distToOther = Vector3.Distance(transform.position, other.transform.position);
-            float distToWaypoint = Vector3.Distance(transform.position, waypointPosition);
+            float dAgent = Vector3.Distance(transform.position, other.transform.position);
+            float dWaypoint = Vector3.Distance(transform.position, waypoint);
 
-            if (distToOther < waypointStopDistance && distToWaypoint < waypointStopDistance)
+            if (dAgent < waypointStopDistance && dWaypoint < waypointStopDistance)
             {
                 if (!HasRightOfWayOver(other))
                     return true;
             }
         }
+
         return false;
     }
 
+    // -------------------- PRIORITY --------------------
+
     private bool HasRightOfWayOver(AgentCoordinationController other)
     {
-        float myPriority = CalculatePriority();
-        float otherPriority = other.CalculatePriority();
+        float myP = CalculatePriority();
+        float otherP = other.CalculatePriority();
 
-        if (Mathf.Abs(myPriority - otherPriority) < 0.01f)
+        if (Mathf.Abs(myP - otherP) < 0.01f)
             return GetInstanceID() > other.GetInstanceID();
 
-        return myPriority > otherPriority;
+        return myP > otherP;
     }
 
     private float CalculatePriority()
     {
-        float baseSpeedWithParcels = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : 1f;
-        float speedFactor = baseSpeedWithParcels / 8f;
+        float speed = parcelSystem != null ? parcelSystem.GetModifiedSpeed() : 1f;
+        float speedFactor = speed / 8f;
 
-        Vector3 myDir = currentDestination - transform.position;
-        float distanceToDest = myDir.magnitude;
-        myDir.Normalize();
-        float directionFactor = Vector3.Dot(transform.forward, myDir);
+        Vector3 toDest = currentDestination - transform.position;
+        float distance = toDest.magnitude;
 
-        float distanceFactor = 1f / (1f + distanceToDest * 0.1f);
+        float directionFactor = distance > 0.01f
+            ? Vector3.Dot(transform.forward, toDest.normalized)
+            : 0f;
 
-        return (speedFactor * speedWeight) +
-               (directionFactor * directionWeight) +
-               (distanceFactor * distanceWeight);
+        float distanceFactor = 1f / (1f + distance * 0.1f);
+
+        return
+            speedFactor * speedWeight +
+            directionFactor * directionWeight +
+            distanceFactor * distanceWeight;
     }
 
-    // ------------------ AVOIDANCE ------------------
+    // -------------------- AVOIDANCE --------------------
+
     public Vector3 GetAvoidanceVector(bool isReturning, bool hasParcels)
     {
         Vector3 avoidance = Vector3.zero;
-
-        // Avoid non-target trees
-        PathfindingTester pathfinder = GetComponent<PathfindingTester>();
-        if (pathfinder != null)
-        {
-            foreach (var tree in pathfinder.trees)
-            {
-                if (tree == null || tree == pathfinder.GetCurrentTree()) continue;
-
-                float dist = Vector3.Distance(transform.position, tree.transform.position);
-                if (dist < slowZoneRadius)
-                {
-                    Vector3 dir = (transform.position - tree.transform.position).normalized;
-                    avoidance += dir / dist;
-                }
-            }
-        }
 
         foreach (var other in AllAgents)
         {
             if (other == this) continue;
 
             float dist = Vector3.Distance(transform.position, other.transform.position);
-            if (dist < slowZoneRadius)
-            {
-                bool otherHasParcels = false;
-                Part2_ParcelSystem otherParcelSystem = other.GetComponent<Part2_ParcelSystem>();
-                if (otherParcelSystem != null)
-                    otherHasParcels = otherParcelSystem.parcelCount > 0;
+            if (dist > slowZoneRadius || dist < 0.01f) continue;
 
-                if (isReturning && !hasParcels && otherHasParcels)
-                {
-                    Vector3 dir = (transform.position - other.transform.position).normalized;
-                    avoidance += dir / dist; // stronger repulsion
-                }
-                else
-                {
-                    Vector3 dir = (transform.position - other.transform.position).normalized;
-                    avoidance += dir / (dist * 2f);
-                }
-            }
+            bool otherHasParcels =
+                other.parcelSystem != null &&
+                other.parcelSystem.parcelCount > 0;
+
+            Vector3 dir = (transform.position - other.transform.position).normalized;
+
+            if (isReturning && !hasParcels && otherHasParcels)
+                avoidance += dir / dist;
+            else
+                avoidance += dir / (dist * 2f);
         }
 
-        // Normalize final avoidance to prevent speed boost
         if (avoidance.magnitude > 1f)
             avoidance.Normalize();
 
         return avoidance;
+    }
+
+    // -------------------- DEBUG GIZMOS --------------------
+
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = new Color(1, 0, 0, 0.25f);
+        Gizmos.DrawSphere(transform.position, stopZoneRadius);
+
+        Gizmos.color = new Color(1, 1, 0, 0.2f);
+        Gizmos.DrawSphere(transform.position, slowZoneRadius);
+
+        Gizmos.color = new Color(0, 1, 1, 0.15f);
+        Gizmos.DrawSphere(transform.position, waypointStopDistance);
     }
 }
