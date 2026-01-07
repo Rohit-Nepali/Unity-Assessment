@@ -8,6 +8,7 @@ TagManager:
   - Waypoint
   - WoodLog
   - DeliveryPoint
+  - Wood
   layers:
   - Default
   - TransparentFX

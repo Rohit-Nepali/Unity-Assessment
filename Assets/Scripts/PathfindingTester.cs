@@ -59,6 +59,10 @@ public class PathfindingTester : MonoBehaviour
     private bool leavingDeliveryPoint = false;
     private bool deliveryCompleted = false;
 
+    // Add near other private variables
+    private bool movingToTreeViaAStar = false;
+    private GameObject treeTargetWaypoint = null;
+
     public bool IsReturningToStart()
     {
         return returningToStart;
@@ -72,7 +76,6 @@ public class PathfindingTester : MonoBehaviour
         // 3. Returning to start has finished
         return !agentMove && !cutting && !hasParcels && !leavingDeliveryPoint;
     }
-
 
     public bool agentMoveActive()
     {
@@ -163,8 +166,6 @@ public class PathfindingTester : MonoBehaviour
         return currentTree;
     }
 
-
-
     void OnDrawGizmos()
     {
         if (aStarPath == null)
@@ -220,6 +221,44 @@ public class PathfindingTester : MonoBehaviour
             {
                 currentTree = null;
                 SelectNextTree();
+                return;
+            }
+
+            // If we're not already using A* to reach the tree, set it up
+            if (!movingToTreeViaAStar)
+            {
+                Debug.Log($"{name} setting up A* to reach tree: {currentTree.name}");
+                // Find nearest waypoint to the tree
+                treeTargetWaypoint = FindNearestWaypoint(currentTree.transform.position);
+
+                if (treeTargetWaypoint != null)
+                {
+                    // Get current waypoint (nearest to agent)
+                    GameObject currentWp = FindNearestWaypoint(transform.position);
+
+                    // Calculate A* path to tree's waypoint
+                    aStarPath = aStarManager.PathfindAStar(currentWp, treeTargetWaypoint);
+
+                    if (aStarPath != null && aStarPath.Count > 0)
+                    {
+                        currentTargetArrayIndex = 0;
+                        agentMove = true;  // Use the existing A* movement system
+                        movingToTreeViaAStar = true;
+                        Debug.Log($"{name} using A* to reach tree via {treeTargetWaypoint.name}");
+                    }
+                    else
+                    {
+                        // Fallback to direct movement if no A* path
+                        Debug.LogWarning($"{name} no A* path to tree, using direct movement");
+                        movingToTreeViaAStar = false;
+                    }
+                }
+            }
+
+            // If we're using A* to reach the tree, let MoveAlongPath() handle movement
+            if (movingToTreeViaAStar && agentMove)
+            {
+                MoveAlongPath();
                 return;
             }
 
@@ -283,7 +322,6 @@ public class PathfindingTester : MonoBehaviour
             MoveAlongPath();
         }
     }
-
 
     public bool IsLeavingDeliveryPoint()
     {
@@ -404,6 +442,32 @@ public class PathfindingTester : MonoBehaviour
             {
                 agentMove = false;
 
+                if (movingToTreeViaAStar)
+                {
+                    // We've reached the tree's waypoint
+                    movingToTreeViaAStar = false;
+                    Debug.Log($"{name} reached tree waypoint via A*, switching to direct movement");
+
+                    // Check distance to actual tree from waypoint
+                    float treeDist = Vector3.Distance(
+                        transform.position,
+                        currentTree.transform.position
+                    );
+
+                    if (treeDist <= 3f) // Close enough to start cutting
+                    {
+                        if (currentTree != null)
+                        {
+                            StartCoroutine(CutTreeRoutine(currentTree));
+                        }
+                    }
+                    else
+                    {
+                        // Need final approach - tree is not exactly at waypoint
+                        // Will use direct movement from Update() next frame
+                    }
+                }
+
                 // Finished RETURNING to start
                 if (returningToStart)
                 {
@@ -418,7 +482,6 @@ public class PathfindingTester : MonoBehaviour
                     // Finished GOING TO TREE if not returning
                     SelectNextTree();
                 }
-
             }
         }
     }
@@ -525,28 +588,34 @@ public class PathfindingTester : MonoBehaviour
         // If delivery point exists, go there. Otherwise go back to start
         if (deliveryPoint != null)
         {
-            // Find nearest waypoint to delivery point for pathfinding
-            GameObject nearestWaypoint = FindNearestWaypoint(deliveryPoint.transform.position);
-            if (nearestWaypoint != null)
+            // Find waypoint NEAR CURRENT POSITION, not 'end'
+            GameObject currentWp = FindNearestWaypoint(transform.position);
+            GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
+
+            if (currentWp != null && deliveryWp != null)
             {
                 currentTargetArrayIndex = 0;
-                aStarPath = aStarManager.PathfindAStar(end, nearestWaypoint);
+                aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp); // ← FIXED!
                 agentMove = true;
+                Debug.Log($"{name} going to delivery from {currentWp.name} to {deliveryWp.name}");
             }
             else
             {
-                // Fallback: go back to start
-                currentTargetArrayIndex = 0;
-                aStarPath = aStarManager.PathfindAStar(end, start);
-                agentMove = true;
+                Debug.LogWarning($"{name} could not find waypoints for delivery");
             }
         }
         else
         {
             // No delivery point, go back to start
-            currentTargetArrayIndex = 0;
-            aStarPath = aStarManager.PathfindAStar(end, start);
-            agentMove = true;
+            GameObject currentWp = FindNearestWaypoint(transform.position);
+            GameObject startWp = FindNearestWaypoint(start.transform.position);
+
+            if (currentWp != null && startWp != null)
+            {
+                currentTargetArrayIndex = 0;
+                aStarPath = aStarManager.PathfindAStar(currentWp, startWp);
+                agentMove = true;
+            }
         }
     }
 
@@ -575,6 +644,46 @@ public class PathfindingTester : MonoBehaviour
         if (deliveryPoint == null)
             return;
 
+        Debug.Log($"{name} MoveToDeliveryPoint: hasParcels={hasParcels}, agentMove={agentMove}");
+
+        // If we're already following an A* path, let it continue
+        if (agentMove && aStarPath != null && aStarPath.Count > 0)
+        {
+            Debug.Log($"{name} Already following A* path to delivery");
+            return;
+        }
+
+        // Try to calculate A* path to delivery
+        GameObject currentWp = FindNearestWaypoint(transform.position);
+        GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
+
+        if (currentWp == null || deliveryWp == null)
+        {
+            Debug.LogError($"{name} Cannot find waypoints for delivery!");
+            return;
+        }
+
+        Debug.Log($"{name} Calculating A* from {currentWp.name} to {deliveryWp.name}");
+
+        aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp);
+
+        if (aStarPath != null && aStarPath.Count > 0)
+        {
+            Debug.Log($"{name} A* path to delivery found ({aStarPath.Count} steps)");
+            currentTargetArrayIndex = 0;
+            agentMove = true;
+            movingToTreeViaAStar = false; // Make sure this is false for delivery
+        }
+        else
+        {
+            Debug.LogWarning($"{name} No A* path to delivery. Using direct movement as fallback");
+            // Fallback to direct movement
+            MoveDirectlyToDelivery();
+        }
+    }
+
+    private void MoveDirectlyToDelivery()
+    {
         Vector3 targetPos = new Vector3(
             deliveryPoint.transform.position.x,
             transform.position.y,

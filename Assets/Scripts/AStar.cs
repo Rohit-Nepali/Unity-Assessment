@@ -3,35 +3,35 @@ using System.Collections.Generic;
 using UnityEngine;
 public class AStar
 {
-public AStar()
-{
-}
-public List<Connection> PathfindAStar(Graph aGraph, GameObject start, GameObject end,
-Heuristic myHeuristic)
-{
-// Set up the start record.
-NodeRecord StartRecord = new NodeRecord();
-StartRecord.Node = start;
-StartRecord.Connection = null;
-StartRecord.CostSoFar = 0;
-StartRecord.EstimatedTotalCost = myHeuristic.Estimate(start, end);
-// Create the lists.
-PathfindingList OpenList = new PathfindingList();
-PathfindingList ClosedList = new PathfindingList();
-// Add the start record to the open list.
-OpenList.AddNodeRecord(StartRecord);
-// Iterate through and process each node.
-NodeRecord CurrentRecord = null;
-List<Connection> Connections;
-while (OpenList.GetSize() > 0)
-{
-// Find the smallest element in the open list (using the estimatedTotalCost).
-CurrentRecord = OpenList.GetSmallestElement();
-// If it is the goal node, then terminate.
-if (CurrentRecord.Node.Equals(end))
-{
-break;
-}
+    public AStar()
+    {
+    }
+    public List<Connection> PathfindAStar(Graph aGraph, GameObject start, GameObject end,
+    Heuristic myHeuristic)
+    {
+        // Set up the start record.
+        NodeRecord StartRecord = new NodeRecord();
+        StartRecord.Node = start;
+        StartRecord.Connection = null;
+        StartRecord.CostSoFar = 0;
+        StartRecord.EstimatedTotalCost = myHeuristic.Estimate(start, end);
+        // Create the lists.
+        PathfindingList OpenList = new PathfindingList();
+        PathfindingList ClosedList = new PathfindingList();
+        // Add the start record to the open list.
+        OpenList.AddNodeRecord(StartRecord);
+        // Iterate through and process each node.
+        NodeRecord CurrentRecord = null;
+        List<Connection> Connections;
+        while (OpenList.GetSize() > 0)
+        {
+            // Find the smallest element in the open list (using the estimatedTotalCost).
+            CurrentRecord = OpenList.GetSmallestElement();
+            // If it is the goal node, then terminate.
+            if (CurrentRecord.Node.Equals(end))
+            {
+                break;
+            }
             // Otherwise get its outgoing connections.
             Connections = aGraph.GetConnections(CurrentRecord.Node);
             // Loop through each connection in turn.
@@ -94,8 +94,8 @@ break;
                 }
             } //#END: Looping through Connections.
               // We’ve finished looking at the connections for the current node, so add it to the closed
-// and remove it from the open list
-OpenList.RemoveNodeRecord(CurrentRecord);
+              // and remove it from the open list
+            OpenList.RemoveNodeRecord(CurrentRecord);
             ClosedList.AddNodeRecord(CurrentRecord);
         }
         // We’re here if we’ve either found the goal, or if we’ve no more nodes to search, find which.
