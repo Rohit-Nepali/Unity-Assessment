@@ -63,6 +63,11 @@ public class PathfindingTester : MonoBehaviour
     private bool movingToTreeViaAStar = false;
     private GameObject treeTargetWaypoint = null;
 
+    // Add near other private variables
+    private List<GameObject> visitedTrees = new List<GameObject>();
+    private List<GameObject> remainingTrees = new List<GameObject>();
+    private bool allTreesVisited = false;
+
     public bool IsReturningToStart()
     {
         return returningToStart;
@@ -157,6 +162,11 @@ public class PathfindingTester : MonoBehaviour
             agentMove = false;
         }
 
+        // Initialize tree tracking
+        remainingTrees = new List<GameObject>(trees); // Copy of all trees
+        visitedTrees = new List<GameObject>();
+        allTreesVisited = false;
+
         // Select the first available tree
         SelectNextTree();
     }
@@ -205,21 +215,31 @@ public class PathfindingTester : MonoBehaviour
             }
         }
 
-
-        // Check if agent should move to delivery point (if has parcels and delivery point exists)
-        if (hasParcels && deliveryPoint != null && currentTree == null && !agentMove)
+        // === DELIVERY ONLY AFTER ALL TREES ARE VISITED ===
+        if (allTreesVisited && hasParcels && deliveryPoint != null)
         {
-            MoveToDeliveryPoint();
-            return;
+            // If we have a path to follow
+            if (agentMove && aStarPath != null && aStarPath.Count > 0)
+            {
+                MoveAlongPath();
+                return;
+            }
+            // If we should be moving but aren't
+            else if (!agentMove)
+            {
+                MoveToDeliveryPoint();
+                return;
+            }
         }
 
         // Move to tree if agent reached the end of path
-        if (currentTree != null && !cutting)
+        if (currentTree != null && !cutting && !allTreesVisited)
         {
             // Check if tree still exists (might have been destroyed by another agent)
             if (currentTree == null || !trees.Contains(currentTree))
             {
                 currentTree = null;
+                movingToTreeViaAStar = false;
                 SelectNextTree();
                 return;
             }
@@ -313,13 +333,21 @@ public class PathfindingTester : MonoBehaviour
                 else
                 {
                     // Tree was destroyed, select new one
+                    movingToTreeViaAStar = false;
                     SelectNextTree();
                 }
             }
+            return;
         }
-        else if (agentMove)
+        // === INITIAL A* PATH (only if not tree hunting and not all trees visited) ===
+        if (agentMove && currentTree == null && !allTreesVisited && !hasParcels)
         {
             MoveAlongPath();
+        }
+        else if (currentTree == null && !allTreesVisited && !hasParcels && !agentMove)
+        {
+            // Finished initial path, start tree hunting
+            SelectNextTree();
         }
     }
 
@@ -489,21 +517,39 @@ public class PathfindingTester : MonoBehaviour
 
     private void SelectNextTree()
     {
-        // Clear current tree reference first
-        currentTree = null;
+        // Check if we've visited all trees
+        if (remainingTrees.Count == 0)
+        {
+            allTreesVisited = true;
+            currentTree = null;
+            Debug.Log($"{name} visited ALL trees! Going to delivery.");
+
+            // Go to delivery with all collected logs
+            if (parcelSystem != null && parcelSystem.parcelCount > 0)
+            {
+                hasParcels = true;
+                GoToDeliveryPoint();
+            }
+            return;
+        }
+
+        // Clear current tree if invalid
+        if (currentTree == null || !remainingTrees.Contains(currentTree))
+        {
+            currentTree = null;
+        }
+        else if (currentTree != null && remainingTrees.Contains(currentTree))
+        {
+            // Already have a valid tree from remaining list
+            Debug.Log($"{name} already has tree: {currentTree.name}");
+            return;
+        }
 
         float minDist = float.MaxValue;
         GameObject nearestTree = null;
 
-        // Create a copy of trees list to avoid modification during iteration
-        List<GameObject> validTrees = new List<GameObject>();
-        foreach (var tree in trees)
-        {
-            if (tree != null)
-                validTrees.Add(tree);
-        }
-
-        foreach (var tree in validTrees)
+        // Search only in remaining trees
+        foreach (var tree in remainingTrees)
         {
             if (tree == null)
                 continue;
@@ -524,19 +570,78 @@ public class PathfindingTester : MonoBehaviour
             if (TreeReservationManager.Instance.ReserveTree(nearestTree))
             {
                 currentTree = nearestTree;
-                Debug.Log(name + " RESERVED tree: " + currentTree.name);
+                Debug.Log(name + " RESERVED tree: " + currentTree.name +
+                         $" ({remainingTrees.Count} trees remaining)");
             }
             else
             {
-                // Tree was reserved by another agent, try again
+                Debug.Log($"{name} tree {nearestTree.name} already reserved");
                 currentTree = null;
             }
         }
         else
         {
             currentTree = null;
-            Debug.Log(name + " found no trees to cut.");
+            Debug.Log(name + " found no available trees to cut.");
+
+            // If no trees available but some remain (all reserved), wait
+            if (remainingTrees.Count > 0)
+            {
+                Debug.Log($"{name} waiting for trees to become available...");
+            }
         }
+
+        // Create a copy of trees list to avoid modification during iteration
+        // List<GameObject> validTrees = new List<GameObject>();
+        // foreach (var tree in trees)
+        // {
+        //     if (tree != null)
+        //         validTrees.Add(tree);
+        // }
+
+        // foreach (var tree in validTrees)
+        // {
+        //     if (tree == null)
+        //         continue;
+
+        //     if (TreeReservationManager.Instance.IsTreeReserved(tree))
+        //         continue;
+
+        //     float d = Vector3.Distance(transform.position, tree.transform.position);
+        //     if (d < minDist)
+        //     {
+        //         minDist = d;
+        //         nearestTree = tree;
+        //     }
+        // }
+
+        // if (nearestTree != null)
+        // {
+        //     if (TreeReservationManager.Instance.ReserveTree(nearestTree))
+        //     {
+        //         currentTree = nearestTree;
+        //         Debug.Log(name + " RESERVED tree: " + currentTree.name);
+
+        //         // Check if tree is VERY close (might be same spot as previous)
+        //         float distToTree = Vector3.Distance(transform.position, currentTree.transform.position);
+        //         if (distToTree < 2f)
+        //         {
+        //             Debug.Log($"{name} tree is very close ({distToTree:F2}m), starting cut immediately");
+        //             StartCoroutine(CutTreeRoutine(currentTree));
+        //         }
+        //     }
+        //     else
+        //     {
+        //         // Tree was reserved by another agent, try again
+        //         Debug.Log($"{name} tree {nearestTree.name} already reserved by another agent");
+        //         currentTree = null;
+        //     }
+        // }
+        // else
+        // {
+        //     currentTree = null;
+        //     Debug.Log(name + " found no trees to cut.");
+        // }
     }
 
     private IEnumerator CutTreeRoutine(GameObject treeToCut)
@@ -549,89 +654,293 @@ public class PathfindingTester : MonoBehaviour
         }
 
         cutting = true;
-        currentTree = null; // Clear current tree reference immediately
-
-        // Optional: Force idle animation
         agent.ForceIdle();
-
-        // Wait for cutting
         yield return new WaitForSeconds(cuttingTime);
 
-        // Store tree position before destroying
-        Vector3 treePosition = treeToCut.transform.position;
-
-        // Spawn wood logs
-        for (int i = 0; i < woodYield; i++)
+        // 1. COLLECT LOG IMMEDIATELY (before destroying tree)
+        if (parcelSystem != null)
         {
-            Vector3 spawnPos =
-                treePosition + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
-            GameObject log = Instantiate(woodLogPrefab, spawnPos, Quaternion.identity);
-            Collider col = log.GetComponent<Collider>();
-            if (col != null)
-                col.isTrigger = true;
-            log.tag = "WoodLog";
+            int beforeCount = parcelSystem.parcelCount;
+            parcelSystem.AddParcel();
+            int afterCount = parcelSystem.parcelCount;
+
+            if (afterCount > beforeCount)
+            {
+                Debug.Log($"{name} ✓ Collected log from {treeToCut.name}. " +
+                          $"Logs: {beforeCount} → {afterCount}");
+            }
         }
 
-        // Destroy the tree
+        // 2. Mark tree as visited
+        visitedTrees.Add(treeToCut);
+        remainingTrees.Remove(treeToCut);
+
+        // 3. Destroy tree
         TreeReservationManager.Instance.ReleaseTree(treeToCut);
         trees.Remove(treeToCut);
         Destroy(treeToCut);
 
-        // Small pause
-        yield return new WaitForSeconds(1f);
-
+        yield return new WaitForSeconds(0.3f);
         cutting = false;
+        currentTree = null;
 
-        // After cutting, agent has parcels, go to delivery point
-        hasParcels = true;
-
-        // If delivery point exists, go there. Otherwise go back to start
-        if (deliveryPoint != null)
+        // 4. Check if done
+        if (remainingTrees.Count == 0)
         {
-            // Find waypoint NEAR CURRENT POSITION, not 'end'
-            GameObject currentWp = FindNearestWaypoint(transform.position);
-            GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
+            allTreesVisited = true;
+            int totalLogs = parcelSystem?.parcelCount ?? 0;
+            Debug.Log($"{name} 🎉 FINISHED ALL {visitedTrees.Count} TREES! " +
+                      $"Total logs: {totalLogs}");
 
-            if (currentWp != null && deliveryWp != null)
+            if (parcelSystem != null && parcelSystem.parcelCount > 0)
             {
-                currentTargetArrayIndex = 0;
-                aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp); // ← FIXED!
-                agentMove = true;
-                Debug.Log($"{name} going to delivery from {currentWp.name} to {deliveryWp.name}");
-            }
-            else
-            {
-                Debug.LogWarning($"{name} could not find waypoints for delivery");
+                hasParcels = true;
+                GoToDeliveryPoint();
             }
         }
         else
         {
-            // No delivery point, go back to start
-            GameObject currentWp = FindNearestWaypoint(transform.position);
-            GameObject startWp = FindNearestWaypoint(start.transform.position);
+            SelectNextTree();
+        }
+    }
+    // private IEnumerator CutTreeRoutine(GameObject treeToCut)
+    // {
+    //     if (treeToCut == null)
+    //     {
+    //         cutting = false;
+    //         currentTree = null;
+    //         yield break;
+    //     }
 
-            if (currentWp != null && startWp != null)
+    //     cutting = true;
+
+    //     // Optional: Force idle animation
+    //     agent.ForceIdle();
+
+    //     // Wait for cutting
+    //     yield return new WaitForSeconds(cuttingTime);
+
+    //     // 1. COLLECT LOG IMMEDIATELY (before destroying tree)
+    //     if (parcelSystem != null)
+    //     {
+    //         int beforeCount = parcelSystem.parcelCount;
+    //         parcelSystem.AddParcel();
+    //         int afterCount = parcelSystem.parcelCount;
+
+    //         if (afterCount > beforeCount)
+    //         {
+    //             Debug.Log($"{name} ✓ Collected log from {treeToCut.name}. " +
+    //                       $"Logs: {beforeCount} → {afterCount}");
+    //         }
+    //     }
+
+    //     // Store tree position before destroying
+    //     Vector3 treePosition = treeToCut.transform.position;
+
+    //     // Spawn only one wood log
+    //     Vector3 spawnPos = treePosition + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
+    //     GameObject log = Instantiate(woodLogPrefab, spawnPos, Quaternion.identity);
+
+    //     Collider col = log.GetComponent<Collider>();
+    //     if (col != null)
+    //         col.isTrigger = true;
+    //     log.tag = "WoodLog";
+
+    //     // Mark tree as visited
+    //     visitedTrees.Add(treeToCut);
+    //     remainingTrees.Remove(treeToCut);
+    //     Debug.Log($"{name} cut {treeToCut.name}. " +
+    //               $"Visited: {visitedTrees.Count}/{trees.Count}, " +
+    //               $"Remaining: {remainingTrees.Count}");
+
+
+    //     // Destroy the tree
+    //     TreeReservationManager.Instance.ReleaseTree(treeToCut);
+    //     trees.Remove(treeToCut);
+    //     Destroy(treeToCut);
+
+    //     // Small pause
+    //     yield return new WaitForSeconds(1f);
+
+    //     cutting = false;
+    //     currentTree = null;
+
+    //     // Check if we've visited ALL trees
+    //     if (remainingTrees.Count == 0)
+    //     {
+    //         allTreesVisited = true;
+    //         Debug.Log($"{name} FINISHED ALL TREES! Total logs: {parcelSystem?.parcelCount ?? 0}");
+
+    //         // Go to delivery with all collected logs
+    //         if (parcelSystem != null && parcelSystem.parcelCount > 0)
+    //         {
+    //             hasParcels = true;
+    //             GoToDeliveryPoint();
+    //         }
+    //     }
+    //     else
+    //     {
+    //         // Not finished yet, select next tree
+    //         SelectNextTree();
+    //     }
+    // }
+
+    private void GoToDeliveryPoint()
+    {
+        if (deliveryPoint == null)
+        {
+            Debug.LogError($"{name} deliveryPoint is null!");
+            return;
+        }
+
+        if (!allTreesVisited)
+        {
+            Debug.LogWarning($"{name} trying to deliver before visiting all trees!");
+            return;
+        }
+
+        Debug.Log($"{name} going to deliver {parcelSystem?.parcelCount ?? 0} logs");
+
+        // Reset movement state
+        agentMove = false;
+        movingToTreeViaAStar = false;
+        currentTree = null;
+
+        GameObject currentWp = FindNearestWaypoint(transform.position);
+        GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
+
+        Debug.Log($"{name} Current waypoint: {currentWp?.name}, Delivery waypoint: {deliveryWp?.name}");
+
+        if (currentWp != null && deliveryWp != null)
+        {
+            aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp);
+
+            if (aStarPath != null && aStarPath.Count > 0)
             {
+                Debug.Log($"{name} A* path to delivery found with {aStarPath.Count} steps");
                 currentTargetArrayIndex = 0;
-                aStarPath = aStarManager.PathfindAStar(currentWp, startWp);
-                agentMove = true;
+                agentMove = true;  // CRITICAL: Enable movement
+                hasParcels = true; // Ensure delivery flag is set
+
+                // Force Update() to use MoveAlongPath()
+                Debug.Log($"{name} Starting delivery movement. agentMove={agentMove}");
+            }
+            else
+            {
+                Debug.LogError($"{name} NO A* path found from {currentWp.name} to {deliveryWp.name}!");
+                // Fallback to direct movement
+                // StartCoroutine(MoveDirectlyToDeliveryFallback());
             }
         }
+        else
+        {
+            Debug.LogError($"{name} Cannot find waypoints: current={currentWp != null}, delivery={deliveryWp != null}");
+        }
+    }
+
+    // private void GoToDeliveryPoint()
+    // {
+    //     if (deliveryPoint == null) return;
+
+    //     if (!allTreesVisited)
+    //     {
+    //         Debug.LogWarning($"{name} trying to deliver before visiting all trees!");
+    //         return;
+    //     }
+
+    //     Debug.Log($"{name} going to deliver {parcelSystem?.parcelCount ?? 0} logs");
+
+    //     GameObject currentWp = FindNearestWaypoint(transform.position);
+    //     GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
+
+    //     if (currentWp != null && deliveryWp != null)
+    //     {
+    //         currentTargetArrayIndex = 0;
+    //         aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp);
+    //         agentMove = true;
+    //     }
+    // }
+
+    // private void GoToDeliveryPoint()
+    // {
+
+    //     if (deliveryPoint == null) return; 
+
+    //     if (deliveryPoint == null)
+    //     {
+    //         // No delivery point, return to start
+    //         GameObject currentWpt = FindNearestWaypoint(transform.position);
+    //         GameObject startWp = FindNearestWaypoint(start.transform.position);
+
+    //         if (currentWpt != null && startWp != null)
+    //         {
+    //             currentTargetArrayIndex = 0;
+    //             aStarPath = aStarManager.PathfindAStar(currentWpt, startWp);
+    //             agentMove = true;
+    //         }
+    //         return;
+    //     }
+
+    //     // Calculate path to delivery point
+    //     GameObject currentWp = FindNearestWaypoint(transform.position);
+    //     GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
+
+    //     if (currentWp != null && deliveryWp != null)
+    //     {
+    //         currentTargetArrayIndex = 0;
+    //         aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp);
+    //         agentMove = true;
+    //         Debug.Log($"{name} at max parcels ({GetComponent<Part2_ParcelSystem>()?.parcelCount}), going to delivery");
+    //     }
+    // }
+
+    private GameObject FindNearbyLog()
+    {
+        // Find all wood logs in scene
+        GameObject[] allLogs = GameObject.FindGameObjectsWithTag("WoodLog");
+        GameObject nearestLog = null;
+        float minDist = float.MaxValue;
+
+        foreach (GameObject log in allLogs)
+        {
+            if (log == null) continue;
+
+            float dist = Vector3.Distance(transform.position, log.transform.position);
+            if (dist < 3f && dist < minDist) // Within 3 units
+            {
+                minDist = dist;
+                nearestLog = log;
+            }
+        }
+
+        return nearestLog;
     }
 
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("WoodLog"))
         {
+            Debug.Log($"{name} encountered wood log");
+            // Check parcel system exists
+            if (parcelSystem == null)
+            {
+                parcelSystem = GetComponent<Part2_ParcelSystem>();
+            }
+
             if (parcelSystem != null)
             {
                 parcelSystem.AddParcel();
+                Destroy(other.gameObject);
+                Debug.Log($"{name} collected wood log, total parcels: {parcelSystem.parcelCount}");
             }
-            Destroy(other.gameObject);
+            else
+            {
+                Debug.Log($"{name} at max parcels, ignoring log");
+            }
         }
         else if (other.CompareTag("DeliveryPoint"))
         {
-            // Agent reached delivery point
+            Debug.Log($"{name} reached delivery point");
             if (!deliveryCompleted && hasParcels && parcelSystem != null && parcelSystem.parcelCount > 0)
             {
                 DeliverParcels();
@@ -732,23 +1041,23 @@ public class PathfindingTester : MonoBehaviour
 
     private void DeliverParcels()
     {
-        if (deliveryCompleted)
-            return;
+        if (deliveryCompleted) return;
 
-        if (parcelSystem == null)
-            return;
+        if (parcelSystem == null) return;
 
         int deliveredCount = parcelSystem.parcelCount;
-        if (deliveredCount <= 0)
-            return;
+        if (deliveredCount <= 0) return;
 
         deliveryCompleted = true;
 
-        Debug.Log($"{name} delivered {deliveredCount} parcels!");
+        Debug.Log($"{name} delivered ALL {deliveredCount} logs from {visitedTrees.Count} trees!");
 
         //clear parcels
         parcelSystem.ClearParcels();
         hasParcels = false;
+        allTreesVisited = false;
+        visitedTrees.Clear();
+        remainingTrees = new List<GameObject>(trees);
 
         //switch states
         returningToStart = true;

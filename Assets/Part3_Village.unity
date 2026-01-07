@@ -4145,15 +4145,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4486357445655057346, guid: 619c342820c174545838ce1822bb5552, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 463.51
+      value: 463.6
       objectReference: {fileID: 0}
     - target: {fileID: 4486357445655057346, guid: 619c342820c174545838ce1822bb5552, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 4
+      value: 4.013
       objectReference: {fileID: 0}
     - target: {fileID: 4486357445655057346, guid: 619c342820c174545838ce1822bb5552, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 481.98
+      value: 482.3
       objectReference: {fileID: 0}
     - target: {fileID: 4486357445655057346, guid: 619c342820c174545838ce1822bb5552, type: 3}
       propertyPath: m_LocalRotation.w
@@ -7411,7 +7411,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   start: {fileID: 1280622200}
-  end: {fileID: 1280622200}
+  end: {fileID: 197389637}
   deliveryPoint: {fileID: 1748844860}
   trees:
   - {fileID: 190405599}
@@ -7419,7 +7419,7 @@ MonoBehaviour:
   - {fileID: 1041462416}
   woodLogPrefab: {fileID: 3932628515972652536, guid: 49d767110bf555e4dbde960026146376, type: 3}
   cuttingTime: 5
-  woodYield: 4
+  woodYield: 1
 --- !u!114 &1270616102
 MonoBehaviour:
   m_ObjectHideFlags: 0
