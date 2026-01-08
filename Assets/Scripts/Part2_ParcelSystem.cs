@@ -16,11 +16,11 @@ public class Part2_ParcelSystem : MonoBehaviour
     [Header("Parcel Visuals")]
     public Transform parcelVisualParent; // parent to attach parcel visuals
     public GameObject parcelVisualPrefab; // prefab for a single parcel visual
-    
+
     [Header("UI Display")]
     public bool showParcelCountAboveAgent = true;
     public GameObject parcelCountTextPrefab; // TextMeshPro prefab for showing count
-    
+
     private List<GameObject> parcelVisuals = new List<GameObject>();
     private GameObject parcelCountTextObject;
     private TMPro.TMP_Text parcelCountText;
@@ -112,7 +112,7 @@ public class Part2_ParcelSystem : MonoBehaviour
         parcelCountTextObject = Instantiate(parcelCountTextPrefab, transform);
         parcelCountTextObject.transform.localPosition = new Vector3(0, 2.5f, 0);
         parcelCountText = parcelCountTextObject.GetComponent<TMPro.TextMeshPro>();
-        
+
         if (parcelCountText == null)
         {
             parcelCountText = parcelCountTextObject.GetComponent<TMPro.TextMeshProUGUI>();

@@ -40,7 +40,7 @@ public class PathfindingTester : MonoBehaviour
     public List<GameObject> trees = new List<GameObject>(); // Support multiple trees
     public GameObject woodLogPrefab;
     public float cuttingTime = 4f;
-    public int woodYield = 4; // How many logs one tree produces
+    public int woodYield = 1; // How many logs one tree produces
 
     private bool cutting = false;
     private bool isIdle = false;
@@ -514,7 +514,6 @@ public class PathfindingTester : MonoBehaviour
         }
     }
 
-
     private void SelectNextTree()
     {
         // Check if we've visited all trees
@@ -590,58 +589,6 @@ public class PathfindingTester : MonoBehaviour
                 Debug.Log($"{name} waiting for trees to become available...");
             }
         }
-
-        // Create a copy of trees list to avoid modification during iteration
-        // List<GameObject> validTrees = new List<GameObject>();
-        // foreach (var tree in trees)
-        // {
-        //     if (tree != null)
-        //         validTrees.Add(tree);
-        // }
-
-        // foreach (var tree in validTrees)
-        // {
-        //     if (tree == null)
-        //         continue;
-
-        //     if (TreeReservationManager.Instance.IsTreeReserved(tree))
-        //         continue;
-
-        //     float d = Vector3.Distance(transform.position, tree.transform.position);
-        //     if (d < minDist)
-        //     {
-        //         minDist = d;
-        //         nearestTree = tree;
-        //     }
-        // }
-
-        // if (nearestTree != null)
-        // {
-        //     if (TreeReservationManager.Instance.ReserveTree(nearestTree))
-        //     {
-        //         currentTree = nearestTree;
-        //         Debug.Log(name + " RESERVED tree: " + currentTree.name);
-
-        //         // Check if tree is VERY close (might be same spot as previous)
-        //         float distToTree = Vector3.Distance(transform.position, currentTree.transform.position);
-        //         if (distToTree < 2f)
-        //         {
-        //             Debug.Log($"{name} tree is very close ({distToTree:F2}m), starting cut immediately");
-        //             StartCoroutine(CutTreeRoutine(currentTree));
-        //         }
-        //     }
-        //     else
-        //     {
-        //         // Tree was reserved by another agent, try again
-        //         Debug.Log($"{name} tree {nearestTree.name} already reserved by another agent");
-        //         currentTree = null;
-        //     }
-        // }
-        // else
-        // {
-        //     currentTree = null;
-        //     Debug.Log(name + " found no trees to cut.");
-        // }
     }
 
     private IEnumerator CutTreeRoutine(GameObject treeToCut)
@@ -703,87 +650,6 @@ public class PathfindingTester : MonoBehaviour
             SelectNextTree();
         }
     }
-    // private IEnumerator CutTreeRoutine(GameObject treeToCut)
-    // {
-    //     if (treeToCut == null)
-    //     {
-    //         cutting = false;
-    //         currentTree = null;
-    //         yield break;
-    //     }
-
-    //     cutting = true;
-
-    //     // Optional: Force idle animation
-    //     agent.ForceIdle();
-
-    //     // Wait for cutting
-    //     yield return new WaitForSeconds(cuttingTime);
-
-    //     // 1. COLLECT LOG IMMEDIATELY (before destroying tree)
-    //     if (parcelSystem != null)
-    //     {
-    //         int beforeCount = parcelSystem.parcelCount;
-    //         parcelSystem.AddParcel();
-    //         int afterCount = parcelSystem.parcelCount;
-
-    //         if (afterCount > beforeCount)
-    //         {
-    //             Debug.Log($"{name} ✓ Collected log from {treeToCut.name}. " +
-    //                       $"Logs: {beforeCount} → {afterCount}");
-    //         }
-    //     }
-
-    //     // Store tree position before destroying
-    //     Vector3 treePosition = treeToCut.transform.position;
-
-    //     // Spawn only one wood log
-    //     Vector3 spawnPos = treePosition + new Vector3(Random.Range(-1f, 1f), 0.3f, Random.Range(-1f, 1f));
-    //     GameObject log = Instantiate(woodLogPrefab, spawnPos, Quaternion.identity);
-
-    //     Collider col = log.GetComponent<Collider>();
-    //     if (col != null)
-    //         col.isTrigger = true;
-    //     log.tag = "WoodLog";
-
-    //     // Mark tree as visited
-    //     visitedTrees.Add(treeToCut);
-    //     remainingTrees.Remove(treeToCut);
-    //     Debug.Log($"{name} cut {treeToCut.name}. " +
-    //               $"Visited: {visitedTrees.Count}/{trees.Count}, " +
-    //               $"Remaining: {remainingTrees.Count}");
-
-
-    //     // Destroy the tree
-    //     TreeReservationManager.Instance.ReleaseTree(treeToCut);
-    //     trees.Remove(treeToCut);
-    //     Destroy(treeToCut);
-
-    //     // Small pause
-    //     yield return new WaitForSeconds(1f);
-
-    //     cutting = false;
-    //     currentTree = null;
-
-    //     // Check if we've visited ALL trees
-    //     if (remainingTrees.Count == 0)
-    //     {
-    //         allTreesVisited = true;
-    //         Debug.Log($"{name} FINISHED ALL TREES! Total logs: {parcelSystem?.parcelCount ?? 0}");
-
-    //         // Go to delivery with all collected logs
-    //         if (parcelSystem != null && parcelSystem.parcelCount > 0)
-    //         {
-    //             hasParcels = true;
-    //             GoToDeliveryPoint();
-    //         }
-    //     }
-    //     else
-    //     {
-    //         // Not finished yet, select next tree
-    //         SelectNextTree();
-    //     }
-    // }
 
     private void GoToDeliveryPoint()
     {
@@ -837,62 +703,6 @@ public class PathfindingTester : MonoBehaviour
             Debug.LogError($"{name} Cannot find waypoints: current={currentWp != null}, delivery={deliveryWp != null}");
         }
     }
-
-    // private void GoToDeliveryPoint()
-    // {
-    //     if (deliveryPoint == null) return;
-
-    //     if (!allTreesVisited)
-    //     {
-    //         Debug.LogWarning($"{name} trying to deliver before visiting all trees!");
-    //         return;
-    //     }
-
-    //     Debug.Log($"{name} going to deliver {parcelSystem?.parcelCount ?? 0} logs");
-
-    //     GameObject currentWp = FindNearestWaypoint(transform.position);
-    //     GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
-
-    //     if (currentWp != null && deliveryWp != null)
-    //     {
-    //         currentTargetArrayIndex = 0;
-    //         aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp);
-    //         agentMove = true;
-    //     }
-    // }
-
-    // private void GoToDeliveryPoint()
-    // {
-
-    //     if (deliveryPoint == null) return; 
-
-    //     if (deliveryPoint == null)
-    //     {
-    //         // No delivery point, return to start
-    //         GameObject currentWpt = FindNearestWaypoint(transform.position);
-    //         GameObject startWp = FindNearestWaypoint(start.transform.position);
-
-    //         if (currentWpt != null && startWp != null)
-    //         {
-    //             currentTargetArrayIndex = 0;
-    //             aStarPath = aStarManager.PathfindAStar(currentWpt, startWp);
-    //             agentMove = true;
-    //         }
-    //         return;
-    //     }
-
-    //     // Calculate path to delivery point
-    //     GameObject currentWp = FindNearestWaypoint(transform.position);
-    //     GameObject deliveryWp = FindNearestWaypoint(deliveryPoint.transform.position);
-
-    //     if (currentWp != null && deliveryWp != null)
-    //     {
-    //         currentTargetArrayIndex = 0;
-    //         aStarPath = aStarManager.PathfindAStar(currentWp, deliveryWp);
-    //         agentMove = true;
-    //         Debug.Log($"{name} at max parcels ({GetComponent<Part2_ParcelSystem>()?.parcelCount}), going to delivery");
-    //     }
-    // }
 
     private GameObject FindNearbyLog()
     {
@@ -1052,14 +862,115 @@ public class PathfindingTester : MonoBehaviour
 
         Debug.Log($"{name} delivered ALL {deliveredCount} logs from {visitedTrees.Count} trees!");
 
-        //clear parcels
+        StartCoroutine(DeliveryProcess(deliveredCount));
+
+
+        // //clear parcels
+        // parcelSystem.ClearParcels();
+        // hasParcels = false;
+        // allTreesVisited = false;
+        // visitedTrees.Clear();
+        // remainingTrees = new List<GameObject>(trees);
+
+        // //switch states
+        // returningToStart = true;
+        // leavingDeliveryPoint = true;
+
+        // GameObject from = FindNearestWaypoint(transform.position);
+        // GameObject to = FindNearestWaypoint(start.transform.position);
+
+        // if (from != null && to != null)
+        // {
+        //     currentTargetArrayIndex = 0;
+        //     aStarPath = aStarManager.PathfindAStar(from, to);
+        //     agentMove = true;
+
+        //     Debug.Log($"{name} delivery complete → returning to start from {from.name} to {to.name}");
+        // }
+        // else
+        // {
+        //     Debug.LogWarning($"{name} could not find waypoints to return to start");
+        // }
+    }
+
+    private IEnumerator DeliveryProcess(int logCount)
+    {
+        Debug.Log($"{name} starting delivery process with {logCount} logs");
+
+        // 1. WAIT AT DELIVERY POINT FOR 3 SECONDS
+        Debug.Log($"{name} waiting at delivery point for 3 seconds...");
+        agent.ForceIdle(); // Stop animation
+        yield return new WaitForSeconds(3f);
+
+        // 2. DROP OFF WOOD LOGS VISUALLY
+        Debug.Log($"{name} dropping off {logCount} wood logs at delivery point");
+
+        if (woodLogPrefab != null && deliveryPoint != null)
+        {
+            // Create a container for this agent's delivered logs
+            GameObject deliveryContainer = new GameObject($"{name}_Delivered_{Time.time}");
+            deliveryContainer.transform.position = deliveryPoint.transform.position;
+
+            // Calculate agent-specific offset to prevent overlapping with other agents
+            int agentHash = name.GetHashCode();
+            Vector3 agentBaseOffset = new Vector3(
+                (agentHash % 10) * 0.8f - 4f,  // -4 to +4 range
+                0f,
+                ((agentHash / 10) % 10) * 0.8f - 4f
+            );
+
+            // Spawn each wood log
+            for (int i = 0; i < logCount; i++)
+            {
+                // Calculate position around agent's base offset
+                float angle = i * (360f / logCount);
+                float radius = 0.8f;
+                float x = Mathf.Sin(angle * Mathf.Deg2Rad) * radius;
+                float z = Mathf.Cos(angle * Mathf.Deg2Rad) * radius;
+
+                Vector3 spawnPosition = deliveryPoint.transform.position +
+                                        agentBaseOffset +
+                                        new Vector3(x, 0.3f, - z);
+
+                // Spawn wood log
+                GameObject deliveredLog = Instantiate(woodLogPrefab, spawnPosition,
+                                                      Quaternion.Euler(0, angle, 0));
+
+                // Make it a child of the container
+                deliveredLog.transform.parent = deliveryContainer.transform;
+
+                // Random rotation for natural look
+                deliveredLog.transform.Rotate(
+                    Random.Range(-15f, 15f),
+                    Random.Range(0, 360f),
+                    Random.Range(-15f, 15f)
+                );
+
+                // Scale down slightly
+                deliveredLog.transform.localScale = Vector3.one * 0.7f;
+
+                // Remove functionality (make it decorative only)
+                RemoveLogFunctionality(deliveredLog);
+
+                // Optional: Add agent-specific color
+                MarkLogWithAgentColor(deliveredLog, name);
+            }
+
+            Debug.Log($"{name} spawned {logCount} wood logs at delivery point");
+        }
+
+        yield return new WaitForSeconds(2f);
+
+        // 3. CLEAR PARCELS FROM AGENT
         parcelSystem.ClearParcels();
         hasParcels = false;
         allTreesVisited = false;
         visitedTrees.Clear();
         remainingTrees = new List<GameObject>(trees);
 
-        //switch states
+        // 4. RETURN TO START (ORIGINAL PATH)
+        Debug.Log($"{name} returning to start location...");
+
         returningToStart = true;
         leavingDeliveryPoint = true;
 
@@ -1078,7 +989,91 @@ public class PathfindingTester : MonoBehaviour
         {
             Debug.LogWarning($"{name} could not find waypoints to return to start");
         }
+    }
 
+    // Helper method: Remove functionality from delivered logs
+    private void RemoveLogFunctionality(GameObject log)
+    {
+        // Remove collider so it can't be collected again
+        Collider col = log.GetComponent<Collider>();
+        if (col != null) Destroy(col);
+
+        // Remove any scripts that might make it interactable
+        MonoBehaviour[] scripts = log.GetComponents<MonoBehaviour>();
+        foreach (var script in scripts)
+        {
+            if (script != this) Destroy(script);
+        }
+
+        // Tag it differently so OnTriggerEnter doesn't pick it up
+        log.tag = "DeliveredLog";
+    }
+
+    // Helper method: Mark logs with agent-specific color
+    private void MarkLogWithAgentColor(GameObject log, string agentName)
+    {
+        Renderer renderer = log.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            Color agentColor = GetAgentDeliveryColor(agentName);
+            renderer.material.color = agentColor;
+        }
+    }
+
+    // Add these helper methods to your PathfindingTester class:
+
+    private void SpawnSimpleAgentLogs(int logCount)
+    {
+        if (woodLogPrefab == null || deliveryPoint == null) return;
+
+        // Simple offset based on agent name
+        int agentOffset = name.GetHashCode() % 100;
+        Vector3 baseOffset = new Vector3(
+            (agentOffset % 10) * 0.5f - 2.5f,
+            0.3f,
+            (agentOffset / 10) * 0.5f - 2.5f
+        );
+
+        for (int i = 0; i < logCount; i++)
+        {
+            Vector3 randomOffset = new Vector3(
+                Random.Range(-0.5f, 0.5f),
+                0,
+                Random.Range(-0.5f, 0.5f)
+            );
+
+            Vector3 spawnPos = deliveryPoint.transform.position + baseOffset + randomOffset;
+
+            GameObject log = Instantiate(woodLogPrefab, spawnPos,
+                                         Quaternion.Euler(0, Random.Range(0, 360f), 0));
+
+            // Mark with agent color
+            Renderer renderer = log.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                Color color = renderer.material.color;
+                color.r *= 0.7f + (agentOffset % 10) * 0.03f;
+                color.g *= 0.7f + ((agentOffset / 10) % 10) * 0.03f;
+                renderer.material.color = color;
+            }
+
+            // Remove collider
+            Collider col = log.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+        }
+
+        Debug.Log($"{name} spawned {logCount} logs at delivery");
+    }
+
+    // Helper method: Get color based on agent name
+    private Color GetAgentDeliveryColor(string agentName)
+    {
+        // Different colors for different agents
+        if (agentName.Contains("1")) return new Color(1f, 0.6f, 0.6f, 1f); // Light red
+        if (agentName.Contains("2")) return new Color(0.6f, 1f, 0.6f, 1f); // Light green  
+        if (agentName.Contains("3")) return new Color(0.6f, 0.6f, 1f, 1f); // Light blue
+        if (agentName.Contains("4")) return new Color(1f, 1f, 0.6f, 1f); // Light yellow
+        return new Color(0.8f, 0.8f, 0.8f, 1f); // Light gray for others
     }
 
     private GameObject FindNearestWaypoint(Vector3 position)
