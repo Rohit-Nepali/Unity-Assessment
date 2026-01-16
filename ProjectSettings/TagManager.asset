@@ -9,6 +9,7 @@ TagManager:
   - WoodLog
   - DeliveryPoint
   - Wood
+  - Obstacle
   layers:
   - Default
   - TransparentFX

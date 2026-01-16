@@ -19,7 +19,7 @@ public class Task3Agent : MonoBehaviour
     [Header("Mission Targets")]
     [Tooltip("The home base to return to after mission")]
     public GameObject StartHomeNode;
-    
+
     [Tooltip("The final destination to drop off ALL wood logs")]
     public GameObject DeliveryPoint;
 
@@ -58,10 +58,10 @@ public class Task3Agent : MonoBehaviour
     private float m_MissionStartTime = 0f;
     private float m_TimeToDelivery = 0f;
     private float m_TimeReturning = 0f;
-    
+
     private float m_TimeAtDeliveryArrival = 0f;
     private float m_TimeAtDeliveryDeparture = 0f;
-    
+
     // Tracking
     private Vector3 m_LastPos;
 
@@ -150,7 +150,7 @@ public class Task3Agent : MonoBehaviour
         m_AgentVisuals = GetComponent<Agent>();
         m_Coordinator = GetComponent<AgentCoordinationController>();
         m_ParcelSystem = GetComponent<Task3ParcelManager>();
-        
+
         // Debug check for parcel system
         if (m_ParcelSystem == null)
         {
@@ -167,9 +167,9 @@ public class Task3Agent : MonoBehaviour
             Debug.LogWarning($"[Task3Agent]  AgentCoordinationController not found on {name}. Adding one...");
             m_Coordinator = gameObject.AddComponent<AgentCoordinationController>();
         }
-        
+
         m_ACO = new ACOCON();
-        
+
         // Load Scene Graph for A* (Physical Movement)
         InitializeAStarGraph();
 
@@ -205,7 +205,7 @@ public class Task3Agent : MonoBehaviour
 
         // 4. Run ACO
         Debug.Log("[Task3Agent] Running ACO to optimize Tree Visit Order...");
-        m_ACORoute = m_ACO.ACO(MaxIterations, NumberOfAnts, routeNodes.ToArray(), 
+        m_ACORoute = m_ACO.ACO(MaxIterations, NumberOfAnts, routeNodes.ToArray(),
                                metaConnections, StartHomeNode, routeNodes.Count + 5);
 
         if (m_ACORoute == null || m_ACORoute.Count == 0)
@@ -217,7 +217,7 @@ public class Task3Agent : MonoBehaviour
         {
             Debug.Log($"[Task3Agent] ACO Success! Optimizing tree order...");
             m_OrderedTrees = new List<GameObject>();
-            
+
             foreach (var leg in m_ACORoute)
             {
                 GameObject targetWp = leg.ToNode;
@@ -227,14 +227,14 @@ public class Task3Agent : MonoBehaviour
                     m_OrderedTrees.Add(matchedTree);
                 }
             }
-            
+
             // Add any missed trees
             foreach (var t in TreesToCut)
             {
                 if (!m_OrderedTrees.Contains(t)) m_OrderedTrees.Add(t);
             }
         }
-        
+
         // Start Mission
         m_MissionStartTime = Time.time;
         m_LastPos = transform.position;
@@ -254,26 +254,26 @@ public class Task3Agent : MonoBehaviour
         // 2. Metrics Updates to Manager
         if (m_ParcelSystem != null)
         {
-             // Calculate live times if not finalized
+            // Calculate live times if not finalized
             float dispTimeDel = (m_TimeAtDeliveryArrival > 0) ? (m_TimeAtDeliveryArrival - m_MissionStartTime) : (Time.time - m_MissionStartTime);
             float dispTimeRet = (m_TimeAtDeliveryDeparture > 0) ? (Time.time - m_TimeAtDeliveryDeparture) : 0f;
-            
+
             if (m_MissionComplete)
             {
                 // Final frozen values
-                 dispTimeDel = m_TimeToDelivery;
-                 dispTimeRet = m_TimeReturning;
+                dispTimeDel = m_TimeToDelivery;
+                dispTimeRet = m_TimeReturning;
             }
             else if (m_ReturningHome && m_TimeAtDeliveryDeparture > 0)
             {
-                 // Current return time
-                 dispTimeDel = m_TimeToDelivery; // Frozen
-                 dispTimeRet = Time.time - m_TimeAtDeliveryDeparture;
+                // Current return time
+                dispTimeDel = m_TimeToDelivery; // Frozen
+                dispTimeRet = Time.time - m_TimeAtDeliveryDeparture;
             }
-            else if (m_Delivering || m_CurrentTargetIndex < m_OrderedTrees.Count) 
+            else if (m_Delivering || m_CurrentTargetIndex < m_OrderedTrees.Count)
             {
-                 // On the way
-                 dispTimeRet = 0f;
+                // On the way
+                dispTimeRet = 0f;
             }
 
             m_ParcelSystem.UpdateStats(m_TotalDistance, dispTimeDel, dispTimeRet);
@@ -299,7 +299,7 @@ public class Task3Agent : MonoBehaviour
         if (m_CurrentTargetIndex < m_OrderedTrees.Count)
         {
             GameObject targetTree = m_OrderedTrees[m_CurrentTargetIndex];
-            
+
             if (targetTree == null)
             {
                 m_CurrentTargetIndex++;
@@ -328,7 +328,7 @@ public class Task3Agent : MonoBehaviour
             {
                 Debug.LogWarning($"[Task3Agent] No path to tree {targetTree.name}. Skipping...");
                 m_CurrentTargetIndex++;
-                StartNextObjective(); 
+                StartNextObjective();
             }
             return;
         }
@@ -348,7 +348,7 @@ public class Task3Agent : MonoBehaviour
 
             GameObject currentWp = FindNearestWaypoint(transform.position);
             GameObject destWp = FindNearestWaypoint(DeliveryPoint.transform.position);
-            
+
             m_CurrentPhysicalPath = m_AStarManager.PathfindAStar(currentWp, destWp);
             if (m_CurrentPhysicalPath != null && m_CurrentPhysicalPath.Count > 0)
             {
@@ -365,7 +365,7 @@ public class Task3Agent : MonoBehaviour
             Debug.Log("[Task3Agent] Delivered Parcels. Returning to Base...");
 
             GameObject currentWp = FindNearestWaypoint(transform.position);
-            
+
             m_CurrentPhysicalPath = m_AStarManager.PathfindAStar(currentWp, StartHomeNode);
             if (m_CurrentPhysicalPath != null && m_CurrentPhysicalPath.Count > 0)
             {
@@ -412,6 +412,7 @@ public class Task3Agent : MonoBehaviour
     // MOVEMENT & EXECUTION
     // ═══════════════════════════════════════════════════════════════
 
+
     private void MoveAlongPath()
     {
         if (m_CurrentPhysicalPath == null) return;
@@ -427,10 +428,10 @@ public class Task3Agent : MonoBehaviour
         // Get Target
         GameObject targetWp = m_CurrentPhysicalPath[m_CurrentWaypointIndex].ToNode;
         Vector3 targetPos = targetWp.transform.position;
-        
+
         // Flatten Y
         Vector3 myPos = transform.position;
-        myPos.y = targetPos.y; 
+        myPos.y = targetPos.y;
 
         // Distance Check
         if (Vector3.Distance(myPos, targetPos) < 1.0f)
@@ -439,58 +440,161 @@ public class Task3Agent : MonoBehaviour
             return;
         }
 
-        // Move Logic
+        // Calculate base movement direction (towards waypoint)
         Vector3 dir = (targetPos - transform.position).normalized;
         dir.y = 0;
 
-        if (dir != Vector3.zero)
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 5f);
-
         // Speed Control
         float speed = BaseSpeed;
-        
+
         // 1. Parcel Weight Check
         if (m_ParcelSystem != null)
         {
             speed = m_ParcelSystem.GetModifiedSpeed();
         }
 
-        // 2. Coordination Check
+        // 2. Coordination Check (Agent-Agent)
         if (m_Coordinator != null)
         {
             m_Coordinator.SetDestination(targetPos);
-            
+
+            // Check if should stop for other agent
             if (m_Coordinator.ShouldStopBeforeWaypoint(targetPos))
             {
                 speed = 0;
-                Debug.Log($"[Task3Agent] {name} stopping for another agent at waypoint");
             }
             else
             {
+                // Negotiate speed with other agents
                 float negotiatedSpeed = m_Coordinator.GetNegotiatedSpeed(speed);
-                if (negotiatedSpeed < speed)
-                {
-                    Debug.Log($"[Task3Agent] {name} slowing from {speed:F1} to {negotiatedSpeed:F1}");
-                }
                 speed = negotiatedSpeed;
             }
-            
-            // Avoidance
-            Vector3 avoidance = m_Coordinator.GetAvoidanceVector(m_ReturningHome, HasParcels());
-            if (avoidance.magnitude > 0.01f)
+
+            // Agent-Agent avoidance
+            Vector3 agentAvoidance = m_Coordinator.GetAvoidanceVector(m_ReturningHome, HasParcels());
+            if (agentAvoidance.magnitude > 0.01f)
             {
-                dir += avoidance * 0.5f;
-                dir.Normalize();
+                dir += agentAvoidance * 0.5f;
             }
+
+            // ═══════════════════════════════════════════════════════════
+            // OBSTACLE AVOIDANCE (NEW!)
+            // ═══════════════════════════════════════════════════════════
+            Vector3 obstacleAvoidance = m_Coordinator.GetObstacleAvoidanceVector();
+            if (obstacleAvoidance.magnitude > 0.01f)
+            {
+                dir += obstacleAvoidance;
+
+                // Optional: Log when avoiding (comment out if too spammy)
+                // Debug.Log($"[Task3Agent] {name} avoiding obstacle, deviation: {obstacleAvoidance.magnitude:F2}");
+            }
+
+            // Normalize the final direction
+            dir.Normalize();
         }
 
-        if (m_AgentVisuals != null) 
+        // Rotate towards movement direction
+        if (dir != Vector3.zero)
+        {
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                Quaternion.LookRotation(dir),
+                Time.deltaTime * 5f
+            );
+        }
+
+        // Update animation speed
+        if (m_AgentVisuals != null)
         {
             m_AgentVisuals.SetCurrentSpeed(speed);
         }
-        
+
+        // Apply movement
         m_Controller.Move(dir * speed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
     }
+
+
+    // private void MoveAlongPath()
+    // {
+    //     if (m_CurrentPhysicalPath == null) return;
+
+    //     // Check if path finished
+    //     if (m_CurrentWaypointIndex >= m_CurrentPhysicalPath.Count)
+    //     {
+    //         m_IsMoving = false;
+    //         OnArrivedAtObjective();
+    //         return;
+    //     }
+
+    //     // Get Target
+    //     GameObject targetWp = m_CurrentPhysicalPath[m_CurrentWaypointIndex].ToNode;
+    //     Vector3 targetPos = targetWp.transform.position;
+
+    //     // Flatten Y
+    //     Vector3 myPos = transform.position;
+    //     myPos.y = targetPos.y; 
+
+    //     // Distance Check
+    //     if (Vector3.Distance(myPos, targetPos) < 1.0f)
+    //     {
+    //         m_CurrentWaypointIndex++;
+    //         return;
+    //     }
+
+    //     // Move Logic
+    //     Vector3 dir = (targetPos - transform.position).normalized;
+    //     dir.y = 0;
+
+    //     if (dir != Vector3.zero)
+    //         transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 5f);
+
+    //     // Speed Control
+    //     float speed = BaseSpeed;
+
+    //     // 1. Parcel Weight Check
+    //     if (m_ParcelSystem != null)
+    //     {
+    //         speed = m_ParcelSystem.GetModifiedSpeed();
+    //     }
+
+    //     // 2. Coordination Check
+    //     if (m_Coordinator != null)
+    //     {
+    //         m_Coordinator.SetDestination(targetPos);
+
+    //         if (m_Coordinator.ShouldStopBeforeWaypoint(targetPos))
+    //         {
+    //             speed = 0;
+    //             Debug.Log($"[Task3Agent] {name} stopping for another agent at waypoint");
+    //         }
+    //         else
+    //         {
+    //             float negotiatedSpeed = m_Coordinator.GetNegotiatedSpeed(speed);
+    //             if (negotiatedSpeed < speed)
+    //             {
+    //                 Debug.Log($"[Task3Agent] {name} slowing from {speed:F1} to {negotiatedSpeed:F1}");
+    //             }
+    //             speed = negotiatedSpeed;
+    //         }
+
+    //         // Avoidance
+    //         Vector3 avoidance = m_Coordinator.GetAvoidanceVector(m_ReturningHome, HasParcels());
+    //         if (avoidance.magnitude > 0.01f)
+    //         {
+    //             dir += avoidance * 0.5f;
+    //             dir.Normalize();
+    //         }
+    //     }
+
+    //     if (m_AgentVisuals != null) 
+    //     {
+    //         m_AgentVisuals.SetCurrentSpeed(speed);
+    //     }
+
+    //     m_Controller.Move(dir * speed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
+    // }
+
+
 
     private void OnArrivedAtObjective()
     {
@@ -503,7 +607,7 @@ public class Task3Agent : MonoBehaviour
         if (m_Delivering)
         {
             Debug.Log("[Task3Agent] Arrived at Delivery Point. Offloading...");
-            
+
             // Record Arrival Time
             if (m_TimeAtDeliveryArrival == 0)
             {
@@ -543,7 +647,7 @@ public class Task3Agent : MonoBehaviour
         yield return new WaitForSeconds(CuttingTime);
 
         Debug.Log($"[Task3Agent] TIMBER! Destroying {tree.name} and adding Parcel.");
-        
+
         // Add Parcel
         if (m_ParcelSystem != null)
         {
@@ -562,18 +666,18 @@ public class Task3Agent : MonoBehaviour
 
         m_IsCutting = false;
         m_CurrentTargetIndex++;
-        
+
         yield return new WaitForSeconds(0.5f);
-        
+
         StartNextObjective();
     }
 
     private IEnumerator OffloadRoutine()
     {
         m_AgentVisuals?.ForceIdle();
-        
+
         int count = m_ParcelSystem != null ? m_ParcelSystem.ParcelCount : 0;
-        
+
         if (m_ParcelSystem != null)
         {
             m_ParcelSystem.ClearParcels();
@@ -582,10 +686,10 @@ public class Task3Agent : MonoBehaviour
         Debug.Log($"[Task3Agent] Offloaded {count} logs at {DeliveryPoint.name}");
 
         yield return new WaitForSeconds(1.0f);
-        
+
         // Record Departure Time
         m_TimeAtDeliveryDeparture = Time.time;
-        
+
         StartNextObjective();
     }
 
@@ -618,17 +722,17 @@ public class Task3Agent : MonoBehaviour
     private List<ACOConnection> BuildMetaGraph(List<GameObject> nodes)
     {
         List<ACOConnection> output = new List<ACOConnection>();
-        
+
         Debug.Log($"[META-GRAPH] Building for {nodes.Count} goal nodes...");
-        
+
         foreach (var from in nodes)
         {
             foreach (var to in nodes)
             {
                 if (from == to) continue;
-                
+
                 var path = m_AStarManager.PathfindAStar(from, to);
-                
+
                 if (path != null && path.Count > 0)
                 {
                     // Calculate A* path distance
@@ -640,18 +744,18 @@ public class Task3Agent : MonoBehaviour
                             connection.ToNode.transform.position
                         );
                     }
-                    
+
                     ACOConnection con = new ACOConnection();
                     con.SetConnection(from, to, m_ACO.DefaultPheromone);
-                    
+
                     // Note: You need to add a Distance setter to ACOConnection
                     // con.Distance = aStarDistance;
-                    
+
                     output.Add(con);
                 }
             }
         }
-        
+
         Debug.Log($"[META-GRAPH] Created {output.Count} connections");
         return output;
     }
@@ -677,11 +781,11 @@ public class Task3Agent : MonoBehaviour
     {
         GameObject best = null;
         float minDst = float.MaxValue;
-        
+
         foreach (var tree in TreesToCut)
         {
             if (tree == null || alreadyOrdered.Contains(tree)) continue;
-            
+
             float d = Vector3.Distance(waypoint.transform.position, tree.transform.position);
             if (d < minDst)
             {

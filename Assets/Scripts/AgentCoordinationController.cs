@@ -6,7 +6,7 @@ public class AgentCoordinationController : MonoBehaviour
 {
     public static readonly List<AgentCoordinationController> AllAgents = new();
 
-    [Header("Safety Zones")]
+    [Header("Agent-Agent Safety Zones")]
     public float slowZoneRadius = 4f;
     public float stopZoneRadius = 2f;
     public float waypointStopDistance = 3f;
@@ -16,28 +16,53 @@ public class AgentCoordinationController : MonoBehaviour
     public float directionWeight = 1f;
     public float distanceWeight = 0.5f;
 
-    // private Agent agent;
+    [Header("Obstacle Avoidance")]
+    [Tooltip("How far ahead to detect obstacles")]
+    public float obstacleDetectionDistance = 5f;
+    
+    [Tooltip("Height offset for raycast origin (from agent's feet)")]
+    public float raycastHeightOffset = 1f;
+    
+    [Tooltip("How strongly to deviate when obstacle detected (0-1)")]
+    [Range(0.1f, 1f)]
+    public float avoidanceStrength = 0.5f;
+    
+    [Tooltip("Tag used to identify obstacles")]
+    public string obstacleTag = "Obstacle";
+    
+    [Tooltip("Enable debug visualization")]
+    public bool showDebugRays = true;
+
+    // Components
     private Task3ParcelManager parcelSystem;
     private Task3Agent pathfinder;
+    private CharacterController characterController;
 
+    // State
     private Vector3 currentDestination;
     private Vector3 lastPosition;
-
     private float stuckTimer;
     private bool isWaitingForOtherAgent;
     private bool timerActive = true;
 
+    // Obstacle avoidance state
+    private bool isAvoidingObstacle = false;
+    private float currentAvoidanceAmount = 0f;
+    private const float AVOIDANCE_SMOOTH_SPEED = 5f;
+
     private const float STUCK_THRESHOLD = 3f;
 
-    // -------------------- LIFECYCLE --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // LIFECYCLE
+    // ═══════════════════════════════════════════════════════════════
 
     void Awake()
     {
         AllAgents.Add(this);
 
-        // agent = GetComponent<Agent>();
         parcelSystem = GetComponent<Task3ParcelManager>();
         pathfinder = GetComponent<Task3Agent>();
+        characterController = GetComponent<CharacterController>();
 
         lastPosition = transform.position;
     }
@@ -50,9 +75,99 @@ public class AgentCoordinationController : MonoBehaviour
     void Update()
     {
         UpdateStuckTimer();
+        UpdateObstacleDetection();
     }
 
-    // -------------------- STUCK LOGIC --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // OBSTACLE DETECTION & AVOIDANCE
+    // ═══════════════════════════════════════════════════════════════
+
+    private void UpdateObstacleDetection()
+    {
+        // Only check when agent is moving
+        if (pathfinder == null || !pathfinder.IsMoving())
+        {
+            // Smoothly reduce avoidance when not moving
+            currentAvoidanceAmount = Mathf.Lerp(currentAvoidanceAmount, 0f, Time.deltaTime * AVOIDANCE_SMOOTH_SPEED);
+            isAvoidingObstacle = false;
+            return;
+        }
+
+        // Raycast origin: agent position + height offset
+        Vector3 rayOrigin = transform.position + Vector3.up * raycastHeightOffset;
+        
+        // Raycast direction: agent's forward direction
+        Vector3 rayDirection = transform.forward;
+
+        // Perform raycast
+        RaycastHit hit;
+        bool obstacleDetected = Physics.Raycast(rayOrigin, rayDirection, out hit, obstacleDetectionDistance);
+
+        // Check if hit object has obstacle tag
+        if (obstacleDetected && hit.collider.CompareTag(obstacleTag))
+        {
+            isAvoidingObstacle = true;
+            
+            // Calculate avoidance amount based on distance to obstacle
+            // Closer = stronger avoidance
+            float distanceRatio = 1f - (hit.distance / obstacleDetectionDistance);
+            float targetAvoidance = distanceRatio * avoidanceStrength;
+            
+            // Smooth transition to target avoidance
+            currentAvoidanceAmount = Mathf.Lerp(currentAvoidanceAmount, targetAvoidance, Time.deltaTime * AVOIDANCE_SMOOTH_SPEED);
+            
+            if (showDebugRays)
+            {
+                Debug.DrawLine(rayOrigin, hit.point, Color.red);
+                Debug.DrawLine(hit.point, hit.point + Vector3.up * 2f, Color.red);
+            }
+        }
+        else
+        {
+            // No obstacle - smoothly reduce avoidance
+            isAvoidingObstacle = false;
+            currentAvoidanceAmount = Mathf.Lerp(currentAvoidanceAmount, 0f, Time.deltaTime * AVOIDANCE_SMOOTH_SPEED);
+            
+            if (showDebugRays)
+            {
+                Debug.DrawRay(rayOrigin, rayDirection * obstacleDetectionDistance, Color.green);
+            }
+        }
+    }
+
+
+    /// Get the obstacle avoidance vector to apply to movement direction.
+    /// Call this from Task3Agent's MoveAlongPath() method.
+
+    public Vector3 GetObstacleAvoidanceVector()
+    {
+        if (!isAvoidingObstacle && currentAvoidanceAmount < 0.01f)
+        {
+            return Vector3.zero;
+        }
+
+        // Always go RIGHT when obstacle detected
+        Vector3 rightDirection = transform.right;
+        
+        // Apply avoidance strength
+        return rightDirection * currentAvoidanceAmount;
+    }
+
+    /// Check if agent is currently avoiding an obstacle
+    public bool IsAvoidingObstacle()
+    {
+        return isAvoidingObstacle;
+    }
+
+    /// Get current avoidance amount (0 = none, 1 = maximum)
+    public float GetCurrentAvoidanceAmount()
+    {
+        return currentAvoidanceAmount;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // STUCK LOGIC
+    // ═══════════════════════════════════════════════════════════════
 
     private void UpdateStuckTimer()
     {
@@ -91,14 +206,18 @@ public class AgentCoordinationController : MonoBehaviour
     public float GetStuckTimer() => stuckTimer;
     public bool IsTimerActive() => timerActive;
 
-    // -------------------- DESTINATION --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // DESTINATION
+    // ═══════════════════════════════════════════════════════════════
 
     public void SetDestination(Vector3 destination)
     {
         currentDestination = destination;
     }
 
-    // -------------------- SPEED NEGOTIATION --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // AGENT-AGENT SPEED NEGOTIATION
+    // ═══════════════════════════════════════════════════════════════
 
     public float GetNegotiatedSpeed(float baseSpeed)
     {
@@ -135,7 +254,9 @@ public class AgentCoordinationController : MonoBehaviour
         return finalSpeed;
     }
 
-    // -------------------- WAYPOINT STOP --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // WAYPOINT STOP
+    // ═══════════════════════════════════════════════════════════════
 
     public bool ShouldStopBeforeWaypoint(Vector3 waypoint)
     {
@@ -159,7 +280,9 @@ public class AgentCoordinationController : MonoBehaviour
         return false;
     }
 
-    // -------------------- PRIORITY --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // PRIORITY
+    // ═══════════════════════════════════════════════════════════════
 
     private bool HasRightOfWayOver(AgentCoordinationController other)
     {
@@ -192,7 +315,9 @@ public class AgentCoordinationController : MonoBehaviour
             distanceFactor * distanceWeight;
     }
 
-    // -------------------- AVOIDANCE --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // AGENT-AGENT AVOIDANCE
+    // ═══════════════════════════════════════════════════════════════
 
     public Vector3 GetAvoidanceVector(bool isReturning, bool hasParcels)
     {
@@ -223,10 +348,13 @@ public class AgentCoordinationController : MonoBehaviour
         return avoidance;
     }
 
-    // -------------------- DEBUG GIZMOS --------------------
+    // ═══════════════════════════════════════════════════════════════
+    // DEBUG GIZMOS
+    // ═══════════════════════════════════════════════════════════════
 
     void OnDrawGizmosSelected()
     {
+        // Agent-Agent zones
         Gizmos.color = new Color(1, 0, 0, 0.25f);
         Gizmos.DrawSphere(transform.position, stopZoneRadius);
 
@@ -235,5 +363,21 @@ public class AgentCoordinationController : MonoBehaviour
 
         Gizmos.color = new Color(0, 1, 1, 0.15f);
         Gizmos.DrawSphere(transform.position, waypointStopDistance);
+
+        // Obstacle detection ray
+        Vector3 rayOrigin = transform.position + Vector3.up * raycastHeightOffset;
+        Gizmos.color = isAvoidingObstacle ? Color.red : Color.green;
+        Gizmos.DrawLine(rayOrigin, rayOrigin + transform.forward * obstacleDetectionDistance);
+        
+        // Draw small sphere at ray origin
+        Gizmos.color = Color.blue;
+        Gizmos.DrawWireSphere(rayOrigin, 0.1f);
+        
+        // Draw avoidance direction when avoiding
+        if (isAvoidingObstacle || currentAvoidanceAmount > 0.01f)
+        {
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawLine(transform.position, transform.position + transform.right * currentAvoidanceAmount * 3f);
+        }
     }
 }
