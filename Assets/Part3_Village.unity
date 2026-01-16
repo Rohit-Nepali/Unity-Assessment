@@ -1623,6 +1623,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3967108684766030035, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
       insertIndex: -1
       addedObject: {fileID: 314187327}
+    - targetCorrespondingSourceObject: {fileID: 3967108684766030035, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 314187328}
   m_SourcePrefab: {fileID: 100100000, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
 --- !u!1 &314187321 stripped
 GameObject:
@@ -1718,7 +1721,25 @@ MonoBehaviour:
   WoodLogVisualPrefab: {fileID: 3932628515972652536, guid: 49d767110bf555e4dbde960026146376, type: 3}
   StackOffset: {x: 0.5, y: 0, z: 0}
   StackSpacing: {x: 0, y: 0.25, z: 0}
-  ParcelCountText: {fileID: 710203753}
+  ParcelCountText: {fileID: 0}
+--- !u!114 &314187328
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 314187321}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 009db730982c4704fa6c73190f2f29af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  slowZoneRadius: 4
+  stopZoneRadius: 2
+  waypointStopDistance: 3
+  speedWeight: 2
+  directionWeight: 1
+  distanceWeight: 0.5
 --- !u!1001 &325529521
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1837,6 +1858,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3967108684766030035, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1270616115}
+    - targetCorrespondingSourceObject: {fileID: 3967108684766030035, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1270616116}
   m_SourcePrefab: {fileID: 100100000, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
 --- !u!1001 &326767848
 PrefabInstance:
@@ -2371,30 +2395,42 @@ MonoBehaviour:
     panel: {fileID: 922389011}
     infoText: {fileID: 1757042695}
     agent: {fileID: 1270616102}
+    isDashboard: 0
     timer: 0
     totalDistance: 0
     lastPosition: {x: 0, y: 0, z: 0}
+    missionComplete: 0
+    completionTime: 0
   - quadrant: 1
     panel: {fileID: 1154761243}
     infoText: {fileID: 1611600996}
-    agent: {fileID: 0}
+    agent: {fileID: 1851946070}
+    isDashboard: 0
     timer: 0
     totalDistance: 0
     lastPosition: {x: 0, y: 0, z: 0}
+    missionComplete: 0
+    completionTime: 0
   - quadrant: 2
     panel: {fileID: 300197360}
     infoText: {fileID: 627468328}
-    agent: {fileID: 0}
+    agent: {fileID: 314187325}
+    isDashboard: 0
     timer: 0
     totalDistance: 0
     lastPosition: {x: 0, y: 0, z: 0}
+    missionComplete: 0
+    completionTime: 0
   - quadrant: 3
     panel: {fileID: 1826529874}
     infoText: {fileID: 1523939880}
     agent: {fileID: 0}
+    isDashboard: 0
     timer: 0
     totalDistance: 0
     lastPosition: {x: 0, y: 0, z: 0}
+    missionComplete: 0
+    completionTime: 0
 --- !u!1 &508839308
 GameObject:
   m_ObjectHideFlags: 0
@@ -3117,7 +3153,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4486357445655057346, guid: 619c342820c174545838ce1822bb5552, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 1.96
+      value: 2.068
       objectReference: {fileID: 0}
     - target: {fileID: 4486357445655057346, guid: 619c342820c174545838ce1822bb5552, type: 3}
       propertyPath: m_LocalPosition.z
@@ -3376,9 +3412,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 300197360}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -127, y: 69}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 110, y: -39}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &633873276 stripped
@@ -7959,7 +7995,25 @@ MonoBehaviour:
   WoodLogVisualPrefab: {fileID: 3932628515972652536, guid: 49d767110bf555e4dbde960026146376, type: 3}
   StackOffset: {x: 0.5, y: 0, z: 0}
   StackSpacing: {x: 0, y: 0.25, z: 0}
-  ParcelCountText: {fileID: 1603591335}
+  ParcelCountText: {fileID: 0}
+--- !u!114 &1270616116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1270616091}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 009db730982c4704fa6c73190f2f29af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  slowZoneRadius: 4
+  stopZoneRadius: 2
+  waypointStopDistance: 3
+  speedWeight: 2
+  directionWeight: 1
+  distanceWeight: 0.5
 --- !u!1001 &1275737848
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -10444,15 +10498,15 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1611600995}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 16}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1154761243}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 1, y: 1}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -365, y: -31}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 109, y: -37}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1001 &1620822728
@@ -11436,9 +11490,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 922389011}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -127, y: 75}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 110, y: -33}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1757042695
@@ -12034,6 +12088,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 3967108684766030035, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1851946072}
+    - targetCorrespondingSourceObject: {fileID: 3967108684766030035, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1851946073}
   m_SourcePrefab: {fileID: 100100000, guid: 1c8950e890f8de640b645d9ccc90ffa4, type: 3}
 --- !u!1 &1851946066 stripped
 GameObject:
@@ -12130,7 +12187,25 @@ MonoBehaviour:
   WoodLogVisualPrefab: {fileID: 3932628515972652536, guid: 49d767110bf555e4dbde960026146376, type: 3}
   StackOffset: {x: 0.5, y: 0, z: 0}
   StackSpacing: {x: 0, y: 0.25, z: 0}
-  ParcelCountText: {fileID: 199027254}
+  ParcelCountText: {fileID: 0}
+--- !u!114 &1851946073
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1851946066}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 009db730982c4704fa6c73190f2f29af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  slowZoneRadius: 4
+  stopZoneRadius: 2
+  waypointStopDistance: 3
+  speedWeight: 2
+  directionWeight: 1
+  distanceWeight: 0.5
 --- !u!1001 &1863350900
 PrefabInstance:
   m_ObjectHideFlags: 0

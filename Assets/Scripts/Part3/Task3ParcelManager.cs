@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using TMPro; // Ensure TextMeshPro is available
+using TMPro; 
 
 public class Task3ParcelManager : MonoBehaviour
 {
