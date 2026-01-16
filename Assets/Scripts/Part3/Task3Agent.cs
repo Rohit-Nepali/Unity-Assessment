@@ -27,7 +27,6 @@ public class Task3Agent : MonoBehaviour
     public List<GameObject> TreesToCut = new List<GameObject>();
 
     [Header("Movement")]
-    public float BaseSpeed = 8f;
     public float CuttingTime = 4f;
 
     // --- Components ---
@@ -445,9 +444,10 @@ public class Task3Agent : MonoBehaviour
         dir.y = 0;
 
         // Speed Control
-        float speed = BaseSpeed;
+        // Speed Control
+        float speed = 8f; // Fallback default
 
-        // 1. Parcel Weight Check
+        // 1. Parcel Weight Check (Authoritative Speed Source)
         if (m_ParcelSystem != null)
         {
             speed = m_ParcelSystem.GetModifiedSpeed();
@@ -512,89 +512,6 @@ public class Task3Agent : MonoBehaviour
         // Apply movement
         m_Controller.Move(dir * speed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
     }
-
-
-    // private void MoveAlongPath()
-    // {
-    //     if (m_CurrentPhysicalPath == null) return;
-
-    //     // Check if path finished
-    //     if (m_CurrentWaypointIndex >= m_CurrentPhysicalPath.Count)
-    //     {
-    //         m_IsMoving = false;
-    //         OnArrivedAtObjective();
-    //         return;
-    //     }
-
-    //     // Get Target
-    //     GameObject targetWp = m_CurrentPhysicalPath[m_CurrentWaypointIndex].ToNode;
-    //     Vector3 targetPos = targetWp.transform.position;
-
-    //     // Flatten Y
-    //     Vector3 myPos = transform.position;
-    //     myPos.y = targetPos.y; 
-
-    //     // Distance Check
-    //     if (Vector3.Distance(myPos, targetPos) < 1.0f)
-    //     {
-    //         m_CurrentWaypointIndex++;
-    //         return;
-    //     }
-
-    //     // Move Logic
-    //     Vector3 dir = (targetPos - transform.position).normalized;
-    //     dir.y = 0;
-
-    //     if (dir != Vector3.zero)
-    //         transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 5f);
-
-    //     // Speed Control
-    //     float speed = BaseSpeed;
-
-    //     // 1. Parcel Weight Check
-    //     if (m_ParcelSystem != null)
-    //     {
-    //         speed = m_ParcelSystem.GetModifiedSpeed();
-    //     }
-
-    //     // 2. Coordination Check
-    //     if (m_Coordinator != null)
-    //     {
-    //         m_Coordinator.SetDestination(targetPos);
-
-    //         if (m_Coordinator.ShouldStopBeforeWaypoint(targetPos))
-    //         {
-    //             speed = 0;
-    //             Debug.Log($"[Task3Agent] {name} stopping for another agent at waypoint");
-    //         }
-    //         else
-    //         {
-    //             float negotiatedSpeed = m_Coordinator.GetNegotiatedSpeed(speed);
-    //             if (negotiatedSpeed < speed)
-    //             {
-    //                 Debug.Log($"[Task3Agent] {name} slowing from {speed:F1} to {negotiatedSpeed:F1}");
-    //             }
-    //             speed = negotiatedSpeed;
-    //         }
-
-    //         // Avoidance
-    //         Vector3 avoidance = m_Coordinator.GetAvoidanceVector(m_ReturningHome, HasParcels());
-    //         if (avoidance.magnitude > 0.01f)
-    //         {
-    //             dir += avoidance * 0.5f;
-    //             dir.Normalize();
-    //         }
-    //     }
-
-    //     if (m_AgentVisuals != null) 
-    //     {
-    //         m_AgentVisuals.SetCurrentSpeed(speed);
-    //     }
-
-    //     m_Controller.Move(dir * speed * Time.deltaTime + Vector3.up * Physics.gravity.y * Time.deltaTime);
-    // }
-
-
 
     private void OnArrivedAtObjective()
     {
@@ -672,11 +589,28 @@ public class Task3Agent : MonoBehaviour
         StartNextObjective();
     }
 
+
     private IEnumerator OffloadRoutine()
     {
         m_AgentVisuals?.ForceIdle();
 
         int count = m_ParcelSystem != null ? m_ParcelSystem.ParcelCount : 0;
+        GameObject logPrefab = m_ParcelSystem != null ? m_ParcelSystem.WoodLogVisualPrefab : null;
+
+        // --- VISUAL TRANSFER LOGIC ---
+        if (DeliveryPoint != null && count > 0)
+        {
+            DeliveryZoneVisuals zoneVis = DeliveryPoint.GetComponent<DeliveryZoneVisuals>();
+            if (zoneVis == null)
+            {
+                // Auto-add if missing, just in case
+                zoneVis = DeliveryPoint.AddComponent<DeliveryZoneVisuals>();
+            }
+
+            // Transfer visuals
+            zoneVis.AddLogs(count, logPrefab);
+        }
+        // -----------------------------
 
         if (m_ParcelSystem != null)
         {
