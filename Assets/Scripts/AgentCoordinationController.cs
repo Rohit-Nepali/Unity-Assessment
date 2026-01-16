@@ -16,9 +16,9 @@ public class AgentCoordinationController : MonoBehaviour
     public float directionWeight = 1f;
     public float distanceWeight = 0.5f;
 
-    private Agent agent;
-    private Part2_ParcelSystem parcelSystem;
-    private PathfindingTester pathfinder;
+    // private Agent agent;
+    private Task3ParcelManager parcelSystem;
+    private Task3Agent pathfinder;
 
     private Vector3 currentDestination;
     private Vector3 lastPosition;
@@ -35,9 +35,9 @@ public class AgentCoordinationController : MonoBehaviour
     {
         AllAgents.Add(this);
 
-        agent = GetComponent<Agent>();
-        parcelSystem = GetComponent<Part2_ParcelSystem>();
-        pathfinder = GetComponent<PathfindingTester>();
+        // agent = GetComponent<Agent>();
+        parcelSystem = GetComponent<Task3ParcelManager>();
+        pathfinder = GetComponent<Task3Agent>();
 
         lastPosition = transform.position;
     }
@@ -61,8 +61,8 @@ public class AgentCoordinationController : MonoBehaviour
 
         bool isCutting = pathfinder.IsCutting();
         bool idleAtStart =
-            !pathfinder.agentMoveActive() &&
-            pathfinder.IsReturningToStart() &&
+            !pathfinder.IsMoving() &&
+            pathfinder.IsReturningHome() &&
             !isCutting;
 
         if (idleAtStart || isCutting)
@@ -102,7 +102,7 @@ public class AgentCoordinationController : MonoBehaviour
 
     public float GetNegotiatedSpeed(float baseSpeed)
     {
-        if (pathfinder != null && pathfinder.IsLeavingDeliveryPoint())
+        if (pathfinder != null && pathfinder.IsReturningHome())
             return baseSpeed;
 
         float finalSpeed = baseSpeed;
@@ -139,7 +139,7 @@ public class AgentCoordinationController : MonoBehaviour
 
     public bool ShouldStopBeforeWaypoint(Vector3 waypoint)
     {
-        if (pathfinder != null && pathfinder.IsLeavingDeliveryPoint())
+        if (pathfinder != null && pathfinder.IsReturningHome())
             return false;
 
         foreach (var other in AllAgents)
@@ -207,7 +207,7 @@ public class AgentCoordinationController : MonoBehaviour
 
             bool otherHasParcels =
                 other.parcelSystem != null &&
-                other.parcelSystem.parcelCount > 0;
+                other.parcelSystem.ParcelCount > 0;
 
             Vector3 dir = (transform.position - other.transform.position).normalized;
 

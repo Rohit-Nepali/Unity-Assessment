@@ -8,17 +8,18 @@ public class ACOCON
     public float DefaultPheromone
     {
         get { return defaultPheromone; }
+        set { defaultPheromone = value; }
     }
 
-    private float Alpha = 1.0f;
+    public float Alpha = 1.0f;
 
-    private float Beta = 0.0001f;
+    public float Beta = 0.0001f;
 
     // where 0 ≤ EvaporationFactor ≤ 1 is the evaporation factor of the pheromone. 
-    private float EvaporationFactor = 0.5f;
+    public float EvaporationFactor = 0.5f;
 
     // Q is a constant, it should be ≤ 1.  
-    private float Q = 0.0006f;
+    public float Q = 0.0006f;
 
     // Ants of agents moving through the graph. This class stores properties: Total distance and connections used. 
     private List<ACOAnt> Ants = new List<ACOAnt>();
@@ -162,7 +163,6 @@ public class ACOCON
                             Sum += Q / TmpAnt.AntTourLength;
                         }
                     }
-
                 }
 
                 float NewPheromoneLevel = (1 - EvaporationFactor) * aConnection.PheromoneLevel + Sum;
