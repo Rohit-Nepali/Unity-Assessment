@@ -16,22 +16,35 @@ public class AgentCoordinationController : MonoBehaviour
     public float directionWeight = 1f;
     public float distanceWeight = 0.5f;
 
-    [Header("Obstacle Avoidance")]
+    [Header("Obstacle Avoidance - Detection")]
     [Tooltip("How far ahead to detect obstacles")]
-    public float obstacleDetectionDistance = 5f;
+    public float obstacleDetectionDistance = 6f;
     
     [Tooltip("Height offset for raycast origin (from agent's feet)")]
     public float raycastHeightOffset = 1f;
     
+    [Tooltip("Number of rays in the fan (5, 7, or 9 recommended)")]
+    [Range(3, 11)]
+    public int numberOfRays = 7;
+    
+    [Tooltip("Total angle of the ray fan in degrees")]
+    [Range(30f, 120f)]
+    public float rayFanAngle = 90f;
+    
+    [Header("Obstacle Avoidance - Response")]
     [Tooltip("How strongly to deviate when obstacle detected (0-1)")]
     [Range(0.1f, 1f)]
-    public float avoidanceStrength = 0.5f;
+    public float avoidanceStrength = 0.7f;
     
     [Tooltip("Tag used to identify obstacles")]
     public string obstacleTag = "Obstacle";
     
+    [Header("Debug")]
     [Tooltip("Enable debug visualization")]
     public bool showDebugRays = true;
+    
+    [Tooltip("Show which direction agent chose")]
+    public bool showAvoidanceDirection = true;
 
     // Components
     private Task3ParcelManager parcelSystem;
@@ -48,8 +61,14 @@ public class AgentCoordinationController : MonoBehaviour
     // Obstacle avoidance state
     private bool isAvoidingObstacle = false;
     private float currentAvoidanceAmount = 0f;
+    private float closestObstacleDistance = float.MaxValue;
+    
+    // Smart direction detection
+    private bool shouldGoLeft = true;  // Automatically determined
+    private float leftClearance = 0f;   // How clear is the left side
+    private float rightClearance = 0f;  // How clear is the right side
+    
     private const float AVOIDANCE_SMOOTH_SPEED = 5f;
-
     private const float STUCK_THRESHOLD = 3f;
 
     // ═══════════════════════════════════════════════════════════════
@@ -79,7 +98,7 @@ public class AgentCoordinationController : MonoBehaviour
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // OBSTACLE DETECTION & AVOIDANCE
+    // SMART OBSTACLE DETECTION & AVOIDANCE
     // ═══════════════════════════════════════════════════════════════
 
     private void UpdateObstacleDetection()
@@ -87,7 +106,6 @@ public class AgentCoordinationController : MonoBehaviour
         // Only check when agent is moving
         if (pathfinder == null || !pathfinder.IsMoving())
         {
-            // Smoothly reduce avoidance when not moving
             currentAvoidanceAmount = Mathf.Lerp(currentAvoidanceAmount, 0f, Time.deltaTime * AVOIDANCE_SMOOTH_SPEED);
             isAvoidingObstacle = false;
             return;
@@ -96,30 +114,153 @@ public class AgentCoordinationController : MonoBehaviour
         // Raycast origin: agent position + height offset
         Vector3 rayOrigin = transform.position + Vector3.up * raycastHeightOffset;
         
-        // Raycast direction: agent's forward direction
-        Vector3 rayDirection = transform.forward;
+        // Reset detection state
+        bool anyObstacleDetected = false;
+        closestObstacleDistance = float.MaxValue;
+        
+        // Track clearance on each side
+        // Higher value = more obstacles (less clear)
+        float leftObstacleScore = 0f;
+        float rightObstacleScore = 0f;
+        
+        // Track closest obstacle on each side
+        float leftClosestDist = obstacleDetectionDistance;
+        float rightClosestDist = obstacleDetectionDistance;
+        
+        int leftHits = 0;
+        int rightHits = 0;
+        int centerHits = 0;
 
-        // Perform raycast
-        RaycastHit hit;
-        bool obstacleDetected = Physics.Raycast(rayOrigin, rayDirection, out hit, obstacleDetectionDistance);
+        // Calculate ray directions in a fan pattern
+        float angleStep = rayFanAngle / (numberOfRays - 1);
+        float startAngle = -rayFanAngle / 2f;
 
-        // Check if hit object has obstacle tag
-        if (obstacleDetected && hit.collider.CompareTag(obstacleTag))
+        for (int i = 0; i < numberOfRays; i++)
+        {
+            // Calculate ray direction
+            float currentAngle = startAngle + (angleStep * i);
+            Vector3 rayDirection = Quaternion.Euler(0, currentAngle, 0) * transform.forward;
+            
+            // Perform raycast
+            RaycastHit hit;
+            bool hitSomething = Physics.Raycast(rayOrigin, rayDirection, out hit, obstacleDetectionDistance);
+            
+            // Check if hit object has obstacle tag
+            if (hitSomething && hit.collider.CompareTag(obstacleTag))
+            {
+                anyObstacleDetected = true;
+                
+                // Track overall closest obstacle
+                if (hit.distance < closestObstacleDistance)
+                {
+                    closestObstacleDistance = hit.distance;
+                }
+                
+                // Calculate score based on distance (closer = higher score = more dangerous)
+                float dangerScore = 1f - (hit.distance / obstacleDetectionDistance);
+                
+                // Determine which side this ray belongs to
+                if (currentAngle < -5f) // Left side (with small deadzone)
+                {
+                    leftHits++;
+                    leftObstacleScore += dangerScore;
+                    if (hit.distance < leftClosestDist)
+                        leftClosestDist = hit.distance;
+                }
+                else if (currentAngle > 5f) // Right side (with small deadzone)
+                {
+                    rightHits++;
+                    rightObstacleScore += dangerScore;
+                    if (hit.distance < rightClosestDist)
+                        rightClosestDist = hit.distance;
+                }
+                else // Center
+                {
+                    centerHits++;
+                    // Center obstacles add to both sides (but less weight)
+                    leftObstacleScore += dangerScore * 0.5f;
+                    rightObstacleScore += dangerScore * 0.5f;
+                }
+                
+                // Debug visualization - Red for hit
+                if (showDebugRays)
+                {
+                    Debug.DrawLine(rayOrigin, hit.point, Color.red);
+                }
+            }
+            else
+            {
+                // No hit - this direction is clear
+                // Add clearance to the appropriate side
+                if (currentAngle < -5f)
+                {
+                    // Left side is clear in this direction
+                    leftClosestDist = Mathf.Max(leftClosestDist, obstacleDetectionDistance);
+                }
+                else if (currentAngle > 5f)
+                {
+                    // Right side is clear in this direction
+                    rightClosestDist = Mathf.Max(rightClosestDist, obstacleDetectionDistance);
+                }
+                
+                // Debug visualization - Green for clear
+                if (showDebugRays)
+                {
+                    Debug.DrawRay(rayOrigin, rayDirection * obstacleDetectionDistance, Color.green);
+                }
+            }
+        }
+
+        // Calculate final clearance scores (higher = clearer)
+        leftClearance = (obstacleDetectionDistance - leftObstacleScore) + (leftClosestDist * 0.5f);
+        rightClearance = (obstacleDetectionDistance - rightObstacleScore) + (rightClosestDist * 0.5f);
+
+        // Calculate avoidance response
+        if (anyObstacleDetected)
         {
             isAvoidingObstacle = true;
             
-            // Calculate avoidance amount based on distance to obstacle
-            // Closer = stronger avoidance
-            float distanceRatio = 1f - (hit.distance / obstacleDetectionDistance);
+            // ═══════════════════════════════════════════════════════
+            // SMART DIRECTION DECISION
+            // ═══════════════════════════════════════════════════════
+            
+            // Choose the side with more clearance
+            if (leftClearance > rightClearance)
+            {
+                shouldGoLeft = true;
+            }
+            else if (rightClearance > leftClearance)
+            {
+                shouldGoLeft = false;
+            }
+            // If equal, keep current direction (prevents flickering)
+            
+            // Calculate avoidance amount based on closest obstacle
+            float distanceRatio = 1f - (closestObstacleDistance / obstacleDetectionDistance);
             float targetAvoidance = distanceRatio * avoidanceStrength;
+            
+            // Boost avoidance if many rays detect obstacles (surrounded)
+            int totalHits = leftHits + rightHits + centerHits;
+            if (totalHits > 2)
+            {
+                targetAvoidance *= 1.0f + (totalHits * 0.15f);
+                targetAvoidance = Mathf.Clamp01(targetAvoidance);
+            }
+            
+            // Extra boost if center is blocked
+            if (centerHits > 0)
+            {
+                targetAvoidance = Mathf.Max(targetAvoidance, 0.4f);
+            }
             
             // Smooth transition to target avoidance
             currentAvoidanceAmount = Mathf.Lerp(currentAvoidanceAmount, targetAvoidance, Time.deltaTime * AVOIDANCE_SMOOTH_SPEED);
             
-            if (showDebugRays)
+            // Debug log (optional - can be commented out)
+            if (showAvoidanceDirection && Time.frameCount % 30 == 0) // Every 30 frames
             {
-                Debug.DrawLine(rayOrigin, hit.point, Color.red);
-                Debug.DrawLine(hit.point, hit.point + Vector3.up * 2f, Color.red);
+                string direction = shouldGoLeft ? "LEFT" : "RIGHT";
+                Debug.Log($"[{gameObject.name}] Avoiding obstacle → Going {direction} (L:{leftClearance:F1} vs R:{rightClearance:F1})");
             }
         }
         else
@@ -127,18 +268,13 @@ public class AgentCoordinationController : MonoBehaviour
             // No obstacle - smoothly reduce avoidance
             isAvoidingObstacle = false;
             currentAvoidanceAmount = Mathf.Lerp(currentAvoidanceAmount, 0f, Time.deltaTime * AVOIDANCE_SMOOTH_SPEED);
-            
-            if (showDebugRays)
-            {
-                Debug.DrawRay(rayOrigin, rayDirection * obstacleDetectionDistance, Color.green);
-            }
         }
     }
 
-
+    /// <summary>
     /// Get the obstacle avoidance vector to apply to movement direction.
-    /// Call this from Task3Agent's MoveAlongPath() method.
-
+    /// Automatically chooses LEFT or RIGHT based on which side is clearer.
+    /// </summary>
     public Vector3 GetObstacleAvoidanceVector()
     {
         if (!isAvoidingObstacle && currentAvoidanceAmount < 0.01f)
@@ -146,23 +282,51 @@ public class AgentCoordinationController : MonoBehaviour
             return Vector3.zero;
         }
 
-        // Always go RIGHT when obstacle detected
-        Vector3 rightDirection = transform.right;
+        // Automatically choose direction based on clearance analysis
+        Vector3 avoidDirection = shouldGoLeft ? -transform.right : transform.right;
         
         // Apply avoidance strength
-        return rightDirection * currentAvoidanceAmount;
+        return avoidDirection * currentAvoidanceAmount;
     }
 
+    /// <summary>
     /// Check if agent is currently avoiding an obstacle
+    /// </summary>
     public bool IsAvoidingObstacle()
     {
         return isAvoidingObstacle;
     }
 
+    /// <summary>
     /// Get current avoidance amount (0 = none, 1 = maximum)
+    /// </summary>
     public float GetCurrentAvoidanceAmount()
     {
         return currentAvoidanceAmount;
+    }
+    
+    /// <summary>
+    /// Get distance to closest detected obstacle
+    /// </summary>
+    public float GetClosestObstacleDistance()
+    {
+        return closestObstacleDistance;
+    }
+    
+    /// <summary>
+    /// Get which direction the agent decided to go
+    /// </summary>
+    public bool IsGoingLeft()
+    {
+        return shouldGoLeft;
+    }
+    
+    /// <summary>
+    /// Get clearance values for debugging
+    /// </summary>
+    public (float left, float right) GetClearanceValues()
+    {
+        return (leftClearance, rightClearance);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -364,20 +528,68 @@ public class AgentCoordinationController : MonoBehaviour
         Gizmos.color = new Color(0, 1, 1, 0.15f);
         Gizmos.DrawSphere(transform.position, waypointStopDistance);
 
-        // Obstacle detection ray
+        // Obstacle detection rays (fan pattern)
         Vector3 rayOrigin = transform.position + Vector3.up * raycastHeightOffset;
-        Gizmos.color = isAvoidingObstacle ? Color.red : Color.green;
-        Gizmos.DrawLine(rayOrigin, rayOrigin + transform.forward * obstacleDetectionDistance);
+        
+        float angleStep = numberOfRays > 1 ? rayFanAngle / (numberOfRays - 1) : 0;
+        float startAngle = -rayFanAngle / 2f;
+
+        for (int i = 0; i < numberOfRays; i++)
+        {
+            float currentAngle = startAngle + (angleStep * i);
+            Vector3 rayDirection = Quaternion.Euler(0, currentAngle, 0) * transform.forward;
+            
+            // Color code: Left = Cyan, Center = White, Right = Yellow
+            if (currentAngle < -5f)
+                Gizmos.color = Color.cyan;      // Left rays
+            else if (currentAngle > 5f)
+                Gizmos.color = Color.yellow;    // Right rays
+            else
+                Gizmos.color = Color.white;     // Center rays
+                
+            Gizmos.DrawLine(rayOrigin, rayOrigin + rayDirection * obstacleDetectionDistance);
+        }
         
         // Draw small sphere at ray origin
         Gizmos.color = Color.blue;
-        Gizmos.DrawWireSphere(rayOrigin, 0.1f);
+        Gizmos.DrawWireSphere(rayOrigin, 0.15f);
         
-        // Draw avoidance direction when avoiding
+        // Draw chosen avoidance direction
         if (isAvoidingObstacle || currentAvoidanceAmount > 0.01f)
         {
-            Gizmos.color = Color.magenta;
-            Gizmos.DrawLine(transform.position, transform.position + transform.right * currentAvoidanceAmount * 3f);
+            Vector3 avoidDir = shouldGoLeft ? -transform.right : transform.right;
+            
+            // Magenta for LEFT, Orange for RIGHT
+            Gizmos.color = shouldGoLeft ? Color.magenta : new Color(1f, 0.5f, 0f);
+            
+            Vector3 arrowStart = transform.position + Vector3.up * 1.5f;
+            Vector3 arrowEnd = arrowStart + avoidDir * (currentAvoidanceAmount * 3f + 1f);
+            
+            Gizmos.DrawLine(arrowStart, arrowEnd);
+            
+            // Draw arrowhead
+            Vector3 arrowHead1 = arrowEnd - avoidDir * 0.3f + transform.forward * 0.2f;
+            Vector3 arrowHead2 = arrowEnd - avoidDir * 0.3f - transform.forward * 0.2f;
+            Gizmos.DrawLine(arrowEnd, arrowHead1);
+            Gizmos.DrawLine(arrowEnd, arrowHead2);
+        }
+        
+        // Draw clearance indicators
+        if (showAvoidanceDirection)
+        {
+            // Left clearance bar (cyan)
+            Gizmos.color = Color.cyan;
+            Vector3 leftBarStart = transform.position + Vector3.up * 2f - transform.right * 0.5f;
+            Vector3 leftBarEnd = leftBarStart + Vector3.up * (leftClearance * 0.3f);
+            Gizmos.DrawLine(leftBarStart, leftBarEnd);
+            Gizmos.DrawWireCube(leftBarEnd, Vector3.one * 0.1f);
+            
+            // Right clearance bar (yellow)
+            Gizmos.color = Color.yellow;
+            Vector3 rightBarStart = transform.position + Vector3.up * 2f + transform.right * 0.5f;
+            Vector3 rightBarEnd = rightBarStart + Vector3.up * (rightClearance * 0.3f);
+            Gizmos.DrawLine(rightBarStart, rightBarEnd);
+            Gizmos.DrawWireCube(rightBarEnd, Vector3.one * 0.1f);
         }
     }
 }
